@@ -38,17 +38,12 @@ impl Source {
 
     /// Имя файла без расширения.
     pub fn stem(&self) -> String {
-        self.path
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default()
+        self.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default()
     }
 }
 
 pub fn is_image(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
 }
 
 pub fn load(path: &Path) -> Result<Source, String> {
@@ -80,23 +75,20 @@ pub fn decode(path: &Path) -> Result<DynamicImage, String> {
         .into_dimensions()
         .map_err(|e| fail(&e))?;
     if width > MAX_SIZE || height > MAX_SIZE {
-        return Err(fail(&format!(
-            "{width}×{height} is larger than the {MAX_SIZE}×{MAX_SIZE} limit"
+        let limit = format!("{MAX_SIZE}×{MAX_SIZE}");
+        return Err(fail(&crate::lang::fill(
+            crate::lang::t("{}×{} is larger than the {} limit"),
+            &[&width, &height, &limit],
         )));
     }
-    let mut reader = ImageReader::open(path)
-        .map_err(|e| fail(&e))?
-        .with_guessed_format()
-        .map_err(|e| fail(&e))?;
+    let mut reader = ImageReader::open(path).map_err(|e| fail(&e))?.with_guessed_format().map_err(|e| fail(&e))?;
     // Размер уже проверен, а стандартный предел памяти не пускает 8K в 16 бит.
     reader.no_limits();
     reader.decode().map_err(|e| fail(&e))
 }
 
 pub fn display_name(path: &Path) -> String {
-    path.file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string())
+    path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string())
 }
 
 /// Уменьшить, чтобы большая сторона была не больше `max`. Меньшее не трогаем.

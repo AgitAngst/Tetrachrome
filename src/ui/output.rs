@@ -1,19 +1,22 @@
 //! Правая панель: предпросмотр результата и экспорт.
 
+use anvil_ui::theme::radius;
+use anvil_ui::widgets as w;
+use anvil_ui::{Icon, Kind, Palette, Tone, semibold};
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Ui, Vec2};
 
 use crate::app::{App, ViewMode};
-use crate::icons::{self, Icon};
+use crate::lang::{fill, t};
 use crate::model::{Channel, OutputFormat, SizePolicy};
 use crate::naming;
-use crate::theme::{self, Palette};
+use crate::theme;
 
 use super::panel_header;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
-    let p = Palette::DARK;
+    let p = Palette::of(ui);
     let target = app.target_size();
-    panel_header(ui, "Output", |ui| {
+    panel_header(ui, t("Output"), |ui| {
         if let Some((w, h)) = target {
             let layout = if app.work.alpha { "RGBA" } else { "RGB" };
             ui.label(egui::RichText::new(format!("{w} × {h} · {layout}")).size(12.0).color(p.weak));
@@ -50,32 +53,36 @@ pub fn show(app: &mut App, ui: &mut Ui) {
 }
 
 fn size_warning(app: &mut App, ui: &mut Ui) {
-    let p = Palette::DARK;
+    let p = Palette::of(ui);
+    let color = Tone::Warning.color(&p);
     egui::Frame::new()
-        .fill(p.warn.gamma_multiply(0.10))
-        .stroke(Stroke::new(1.0, p.warn.gamma_multiply(0.45)))
-        .corner_radius(9)
+        .fill(p.soft(color))
+        .stroke(Stroke::new(1.0, color.gamma_multiply(0.35)))
+        .corner_radius(radius::CARD)
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(Vec2::splat(16.0), Sense::hover());
-                icons::paint(ui.painter(), r, Icon::Warning, p.warn);
-                ui.label(egui::RichText::new("Sources have different sizes").font(theme::semibold(13.0)).color(p.warn));
+                theme::icon(ui, Icon::Warning, 16.0, color);
+                ui.label(egui::RichText::new(t("Sources have different sizes")).font(semibold(13.0)).color(p.text));
             });
             let mut sizes = app.source_sizes();
             sizes.sort_unstable();
             sizes.dedup();
             let list: Vec<String> = sizes.iter().map(|(w, h)| format!("{w}×{h}")).collect();
-            ui.label(egui::RichText::new(format!("{} — they will be resampled.", list.join(", "))).size(12.0).color(p.weak));
+            ui.label(
+                egui::RichText::new(fill(t("{} — they will be resampled."), &[&list.join(", ")]))
+                    .size(12.0)
+                    .color(p.weak),
+            );
             ui.add_space(4.0);
             theme::segmented(
                 ui,
                 &mut app.output.policy,
                 &[
-                    (SizePolicy::Largest, "Scale to largest"),
-                    (SizePolicy::Smallest, "Scale to smallest"),
-                    (SizePolicy::Custom, "Custom"),
+                    (SizePolicy::Largest, t("Scale to largest")),
+                    (SizePolicy::Smallest, t("Scale to smallest")),
+                    (SizePolicy::Custom, t("Custom")),
                 ],
                 None,
                 0.0,
@@ -84,35 +91,41 @@ fn size_warning(app: &mut App, ui: &mut Ui) {
 }
 
 fn view_modes(app: &mut App, ui: &mut Ui) {
+    let p = Palette::of(ui);
     let mut options = vec![(ViewMode::Rgba, "RGBA"), (ViewMode::Rgb, "RGB")];
     for c in Channel::ALL {
         options.push((ViewMode::Channel(c), c.letter()));
     }
-    let neutral = Palette::DARK.accent_text;
     let colors = [
-        neutral,
-        neutral,
-        theme::channel_color(Channel::R),
-        theme::channel_color(Channel::G),
-        theme::channel_color(Channel::B),
-        theme::channel_color(Channel::A),
+        p.accent_text,
+        p.accent_text,
+        theme::channel_color(&p, Channel::R),
+        theme::channel_color(&p, Channel::G),
+        theme::channel_color(&p, Channel::B),
+        theme::channel_color(&p, Channel::A),
     ];
     let width = ((ui.available_width() - 4.0) / 6.0).max(36.0);
     theme::segmented(ui, &mut app.view.mode, &options, Some(&colors), width);
 }
 
 /// Большой предпросмотр: колесо — масштаб вокруг курсора, перетаскивание —
-/// сдвиг, двойной щелчок — вписать.
+/// сдвиг, двойной щелчок — вписать. Фон тёмный в любой теме.
 fn canvas(app: &mut App, ui: &mut Ui, size: Vec2) {
-    let p = Palette::DARK;
+    let p = Palette::of(ui);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
     let painter = ui.painter().with_clip_rect(rect.intersect(ui.clip_rect()));
-    painter.rect_filled(rect, 10, Color32::from_rgb(0x0C, 0x0E, 0x12));
+    painter.rect_filled(rect, radius::CARD, theme::PREVIEW_BG);
     app.hovered_pixel = None;
 
     let (Some(target), Some(texture)) = (app.target_size(), app.preview.main.as_ref()) else {
-        painter.text(rect.center(), egui::Align2::CENTER_CENTER, "Nothing to preview yet", egui::FontId::proportional(13.0), p.faint);
-        painter.rect_stroke(rect, 10, Stroke::new(1.0, p.border), egui::StrokeKind::Inside);
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            t("Nothing to preview yet"),
+            egui::FontId::proportional(13.0),
+            theme::PREVIEW_TEXT,
+        );
+        painter.rect_stroke(rect, radius::CARD, Stroke::new(1.0, p.border), egui::StrokeKind::Inside);
         return;
     };
     let texture = texture.id();
@@ -153,18 +166,18 @@ fn canvas(app: &mut App, ui: &mut Ui, size: Vec2) {
     }
     painter.image(texture, image_rect, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
     if app.view.mode == ViewMode::Rgba && app.work.alpha && !app.alpha_visible() {
-        let fill = app.work.slots[Channel::A.index()].fill;
-        let text = format!("Alpha is a constant {fill} — shown opaque");
-        let galley = painter.layout_no_wrap(text, egui::FontId::proportional(11.5), p.weak);
+        let value = app.work.slots[Channel::A.index()].fill;
+        let text = fill(t("Alpha is a constant {} — shown opaque"), &[&value]);
+        let galley = painter.layout_no_wrap(text, egui::FontId::proportional(11.5), theme::PREVIEW_TEXT);
         let chip = Rect::from_min_size(rect.min + egui::vec2(10.0, 10.0), galley.size() + egui::vec2(14.0, 8.0));
         painter.rect_filled(chip, 6, Color32::from_black_alpha(170));
-        painter.galley(chip.min + egui::vec2(7.0, 4.0), galley, p.weak);
+        painter.galley(chip.min + egui::vec2(7.0, 4.0), galley, theme::PREVIEW_TEXT);
     }
     // Сетка пикселей при сильном увеличении.
     if zoom >= 16.0 {
         pixel_grid(&painter, image_rect, zoom, rect);
     }
-    painter.rect_stroke(rect, 10, Stroke::new(1.0, p.border), egui::StrokeKind::Inside);
+    painter.rect_stroke(rect, radius::CARD, Stroke::new(1.0, p.border), egui::StrokeKind::Inside);
 
     if let Some(pos) = response.hover_pos()
         && image_rect.contains(pos)
@@ -172,7 +185,11 @@ fn canvas(app: &mut App, ui: &mut Ui, size: Vec2) {
         let x = (((pos.x - image_rect.min.x) / zoom) as u32).min(target.0 - 1);
         let y = (((pos.y - image_rect.min.y) / zoom) as u32).min(target.1 - 1);
         app.hovered_pixel = Some((x, y));
-        ui.ctx().set_cursor_icon(if response.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Crosshair });
+        ui.ctx().set_cursor_icon(if response.dragged() {
+            egui::CursorIcon::Grabbing
+        } else {
+            egui::CursorIcon::Crosshair
+        });
     }
 }
 
@@ -195,7 +212,7 @@ fn pixel_grid(painter: &egui::Painter, image: Rect, zoom: f32, clip: Rect) {
 
 /// Значения под курсором — точные, из полноразмерных исходников.
 fn readout(app: &App, ui: &mut Ui) {
-    let p = Palette::DARK;
+    let p = Palette::of(ui);
     let height = 22.0;
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::hover());
     let painter = ui.painter();
@@ -203,13 +220,15 @@ fn readout(app: &App, ui: &mut Ui) {
         painter.text(
             rect.left_center(),
             egui::Align2::LEFT_CENTER,
-            "Scroll to zoom · drag to pan · double-click to fit",
+            t("Scroll to zoom · drag to pan · double-click to fit"),
             egui::FontId::proportional(12.0),
-            p.faint,
+            p.weak,
         );
         return;
     };
-    let Some(value) = app.pixel_value(x, y) else { return };
+    let Some(value) = app.pixel_value(x, y) else {
+        return;
+    };
     let mono = egui::FontId::monospace(12.5);
     let mut pos = rect.left_center();
     let mut put = |text: String, color: Color32| {
@@ -219,19 +238,19 @@ fn readout(app: &App, ui: &mut Ui) {
     put(format!("{x:>4},{y:<4}"), p.weak);
     put("  ".to_owned(), p.weak);
     for &c in app.work.channels() {
-        put(format!(" {}", c.letter()), theme::channel_color(c));
+        put(format!(" {}", c.letter()), theme::channel_color(&p, c));
         put(format!(" {:<3}", value[c.index()]), p.text);
     }
     // Образец цвета справа.
     let swatch = Rect::from_center_size(rect.right_center() - egui::vec2(10.0, 0.0), Vec2::splat(16.0));
     painter.rect_filled(swatch, 4, Color32::from_rgb(value[0], value[1], value[2]));
-    painter.rect_stroke(swatch, 4, Stroke::new(1.0, p.border), egui::StrokeKind::Outside);
+    painter.rect_stroke(swatch, 4, Stroke::new(1.0, p.border_strong), egui::StrokeKind::Outside);
 }
 
 /// Четыре полосы — каждый канал отдельно, в оттенках серого.
 fn strips(app: &mut App, ui: &mut Ui) {
-    let p = Palette::DARK;
-    theme::section_label(ui, "Channels");
+    let p = Palette::of(ui);
+    w::section_label(ui, t("Channels"));
     ui.add_space(4.0);
     let gap = 8.0;
     let width = (ui.available_width() - gap * 3.0) / 4.0;
@@ -245,15 +264,27 @@ fn strips(app: &mut App, ui: &mut Ui) {
             let enabled = channel != Channel::A || app.work.alpha;
             ui.vertical(|ui| {
                 ui.set_width(width);
-                let (rect, response) = ui.allocate_exact_size(side, if enabled { Sense::click() } else { Sense::hover() });
+                let (rect, response) =
+                    ui.allocate_exact_size(side, if enabled { Sense::click() } else { Sense::hover() });
                 let painter = ui.painter();
-                painter.rect_filled(rect, 7, p.field);
+                painter.rect_filled(rect, radius::CONTROL, theme::PREVIEW_BG);
                 if enabled && let Some(texture) = &app.preview.strips[i] {
-                    painter.image(texture.id(), rect.shrink(1.0), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+                    painter.image(
+                        texture.id(),
+                        rect.shrink(1.0),
+                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                        Color32::WHITE,
+                    );
                 } else {
-                    painter.text(rect.center(), egui::Align2::CENTER_CENTER, "—", egui::FontId::proportional(14.0), p.faint);
+                    painter.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "—",
+                        egui::FontId::proportional(14.0),
+                        theme::PREVIEW_TEXT,
+                    );
                 }
-                let color = theme::channel_color(channel);
+                let color = theme::channel_color(&p, channel);
                 let active = app.view.mode == ViewMode::Channel(channel);
                 let stroke = if active {
                     Stroke::new(2.0, color)
@@ -262,16 +293,20 @@ fn strips(app: &mut App, ui: &mut Ui) {
                 } else {
                     Stroke::new(1.0, p.border)
                 };
-                painter.rect_stroke(rect, 7, stroke, egui::StrokeKind::Inside);
-                if response.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text("Show this channel alone").clicked() {
+                painter.rect_stroke(rect, radius::CONTROL, stroke, egui::StrokeKind::Inside);
+                if response
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .on_hover_text(t("Show this channel alone"))
+                    .clicked()
+                {
                     app.view.mode = if active { ViewMode::Rgba } else { ViewMode::Channel(channel) };
                 }
                 let role = app.work.slots[i].role.trim();
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
-                    ui.label(egui::RichText::new(channel.letter()).font(theme::semibold(12.0)).color(color));
+                    ui.label(egui::RichText::new(channel.letter()).font(semibold(12.0)).color(color));
                     let text = if !enabled {
-                        "off".to_owned()
+                        t("off").to_owned()
                     } else if role.is_empty() {
                         format!("= {}", app.work.slots[i].fill)
                     } else {
@@ -285,11 +320,11 @@ fn strips(app: &mut App, ui: &mut Ui) {
 }
 
 fn export_section(app: &mut App, ui: &mut Ui) {
-    let p = Palette::DARK;
-    theme::section_label(ui, "Export");
+    let p = Palette::of(ui);
+    w::section_label(ui, t("Export"));
     ui.add_space(6.0);
 
-    field_label(ui, "File name");
+    theme::field_label(ui, t("File name"));
     ui.add(
         egui::TextEdit::singleline(&mut app.output.template)
             .desired_width(ui.available_width())
@@ -299,39 +334,36 @@ fn export_section(app: &mut App, ui: &mut Ui) {
     ui.add_space(2.0);
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-        for (token, what) in naming::TOKENS {
+        for (token, what) in naming::tokens() {
             let r = ui.add(
-                egui::Button::new(egui::RichText::new(*token).monospace().size(11.5).color(p.accent_text))
-                    .fill(p.accent.gamma_multiply(0.12))
-                    .corner_radius(5)
+                egui::Button::new(egui::RichText::new(token).monospace().size(11.5).color(p.accent_text))
+                    .fill(p.soft(p.accent))
+                    .corner_radius(radius::SMALL)
                     .min_size(egui::vec2(0.0, 20.0)),
             );
-            if r.on_hover_text(format!("{what} — click to append")).clicked() {
+            if r.on_hover_text(fill(t("{} — click to append"), &[&what])).clicked() {
                 app.output.template.push_str(token);
             }
         }
     });
     ui.add_space(8.0);
 
-    field_label(ui, "Folder");
+    theme::field_label(ui, t("Folder"));
     ui.horizontal(|ui| {
         let dir = app.output_dir();
         let text = match (&dir, app.output.folder.is_some()) {
             (Some(d), true) => d.display().to_string(),
-            (Some(d), false) => format!("{}  (next to sources)", d.display()),
-            (None, _) => "Next to the first source".to_owned(),
+            (Some(d), false) => fill(t("{}  (next to sources)"), &[&d.display()]),
+            (None, _) => t("Next to the first source").to_owned(),
         };
         let avail = ui.available_width() - 70.0;
-        ui.add_sized(
-            [avail, 26.0],
-            egui::Label::new(egui::RichText::new(text).size(12.5).color(p.weak)).truncate(),
-        )
-        .on_hover_text(dir.map(|d| d.display().to_string()).unwrap_or_default());
-        if icons::button(ui, Icon::Folder, 26.0, "Choose output folder").clicked() {
+        ui.add_sized([avail, 26.0], egui::Label::new(egui::RichText::new(text).size(12.5).color(p.weak)).truncate())
+            .on_hover_text(dir.map(|d| d.display().to_string()).unwrap_or_default());
+        if theme::icon_button(ui, Icon::Folder, 28.0, t("Choose output folder")).clicked() {
             app.pick_output_folder();
         }
         ui.add_enabled_ui(app.output.folder.is_some(), |ui| {
-            if icons::button(ui, Icon::Refresh, 26.0, "Back to “next to sources”").clicked() {
+            if theme::icon_button(ui, Icon::Refresh, 28.0, t("Back to “next to sources”")).clicked() {
                 app.output.folder = None;
             }
         });
@@ -340,33 +372,44 @@ fn export_section(app: &mut App, ui: &mut Ui) {
 
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
-            field_label(ui, "Format");
+            theme::field_label(ui, t("Format"));
             let options: Vec<(OutputFormat, &str)> = OutputFormat::ALL.iter().map(|f| (*f, f.label())).collect();
             theme::segmented(ui, &mut app.output.format, &options, None, 48.0);
         });
         ui.add_space(8.0);
         ui.vertical(|ui| {
-            field_label(ui, "Bit depth");
+            theme::field_label(ui, t("Bit depth"));
             let supports = app.output.format.supports_16bit();
             ui.add_enabled_ui(supports, |ui| {
                 let mut sixteen = app.output.sixteen && supports;
-                if theme::segmented(ui, &mut sixteen, &[(false, "8-bit"), (true, "16-bit")], None, 54.0).changed() {
+                let options = [(false, t("8-bit")), (true, t("16-bit"))];
+                if theme::segmented(ui, &mut sixteen, &options, None, 56.0).changed() {
                     app.output.sixteen = sixteen;
                 }
             })
             .response
-            .on_disabled_hover_text("TGA is always 8-bit");
+            .on_disabled_hover_text(t("TGA is always 8-bit"));
         });
     });
     ui.add_space(8.0);
 
-    field_label(ui, "Size");
+    theme::field_label(ui, t("Size"));
     ui.horizontal(|ui| {
         let mut custom = app.output.policy == SizePolicy::Custom;
         if custom {
-            ui.add(egui::DragValue::new(&mut app.output.custom.0).range(1..=crate::model::MAX_SIZE).speed(4.0).suffix(" px"));
-            ui.label(egui::RichText::new("×").color(p.faint));
-            ui.add(egui::DragValue::new(&mut app.output.custom.1).range(1..=crate::model::MAX_SIZE).speed(4.0).suffix(" px"));
+            ui.add(
+                egui::DragValue::new(&mut app.output.custom.0)
+                    .range(1..=crate::model::MAX_SIZE)
+                    .speed(4.0)
+                    .suffix(" px"),
+            );
+            ui.label(egui::RichText::new("×").color(p.weak));
+            ui.add(
+                egui::DragValue::new(&mut app.output.custom.1)
+                    .range(1..=crate::model::MAX_SIZE)
+                    .speed(4.0)
+                    .suffix(" px"),
+            );
         } else {
             let text = match app.target_size() {
                 Some((w, h)) => format!("{w} × {h}"),
@@ -374,13 +417,13 @@ fn export_section(app: &mut App, ui: &mut Ui) {
             };
             ui.label(egui::RichText::new(text).color(p.text));
             let from = match app.output.policy {
-                SizePolicy::Smallest => "smallest source",
-                _ => "largest source",
+                SizePolicy::Smallest => t("from smallest source"),
+                _ => t("from largest source"),
             };
-            ui.label(egui::RichText::new(format!("from {from}")).size(12.0).color(p.faint));
+            ui.label(egui::RichText::new(from).size(12.0).color(p.weak));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if theme::toggle(ui, &mut custom, "Custom", "Set the output size by hand").changed() {
+            if w::toggle(ui, &mut custom, t("Custom")).on_hover_text(t("Set the output size by hand")).changed() {
                 if custom {
                     if let Some(size) = app.target_size() {
                         app.output.custom = size;
@@ -396,19 +439,23 @@ fn export_section(app: &mut App, ui: &mut Ui) {
 
 /// Итоговое имя и кнопка экспорта.
 fn export_bar(app: &mut App, ui: &mut Ui) {
-    let p = Palette::DARK;
+    let p = Palette::of(ui);
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("→").color(p.faint));
-        ui.add(egui::Label::new(egui::RichText::new(app.output_name()).font(theme::semibold(13.5)).color(p.text)).truncate());
+        ui.label(egui::RichText::new("→").color(p.weak));
+        ui.add(egui::Label::new(egui::RichText::new(app.output_name()).font(semibold(13.5)).color(p.text)).truncate());
     });
     ui.add_space(6.0);
     let ready = app.can_export();
-    let label = if app.exporting() { "Exporting…" } else { "Export" };
+    let label = if app.exporting() { t("Exporting…") } else { t("Export") };
     let width = ui.available_width();
-    let r = theme::primary_button(ui, Some(Icon::Export), label, egui::vec2(width, 40.0), ready.is_ok());
+    let r = ui
+        .add_enabled_ui(ready.is_ok(), |ui| {
+            w::button_sized(ui, Kind::Primary, Some(Icon::Download), label, egui::vec2(width, 40.0))
+        })
+        .inner;
     let r = match ready {
         Ok(()) => r.on_hover_text("Ctrl+E"),
-        Err(why) => r.on_hover_text(why),
+        Err(why) => r.on_disabled_hover_text(why),
     };
     if r.clicked() {
         let ctx = ui.ctx().clone();
@@ -417,19 +464,17 @@ fn export_bar(app: &mut App, ui: &mut Ui) {
     if let Some(path) = app.last_export.clone() {
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            let (r, _) = ui.allocate_exact_size(Vec2::splat(14.0), Sense::hover());
-            icons::paint(ui.painter(), r, Icon::Check, p.good);
-            ui.add(egui::Label::new(egui::RichText::new(crate::source::display_name(&path)).size(12.0).color(p.weak)).truncate());
+            theme::icon(ui, Icon::Check, 14.0, p.success);
+            ui.add(
+                egui::Label::new(egui::RichText::new(crate::source::display_name(&path)).size(12.0).color(p.weak))
+                    .truncate(),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::soft_button(ui, Some(Icon::Folder), "Open folder").clicked() {
+                if w::button(ui, Kind::Secondary, Some(Icon::Folder), t("Open folder")).clicked() {
                     crate::platform::reveal(&path);
                 }
             });
         });
     }
     ui.add_space(4.0);
-}
-
-fn field_label(ui: &mut Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(12.0).color(Palette::DARK.weak));
 }

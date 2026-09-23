@@ -57,12 +57,10 @@ pub fn match_patterns<S: AsRef<str>>(stem: &str, patterns: &[S]) -> Option<(usiz
 
 /// Последнее вхождение `pattern`, за которым конец имени или не буква/цифра.
 fn find_token(haystack: &str, pattern: &str) -> Option<usize> {
-    haystack.rmatch_indices(pattern).map(|(i, _)| i).find(|&i| {
-        haystack[i + pattern.len()..]
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_alphanumeric())
-    })
+    haystack
+        .rmatch_indices(pattern)
+        .map(|(i, _)| i)
+        .find(|&i| haystack[i + pattern.len()..].chars().next().is_none_or(|c| !c.is_alphanumeric()))
 }
 
 /// Убрать повисшие разделители: `Rock__2K` → `Rock_2K`, `Rock_` → `Rock`.
@@ -93,12 +91,16 @@ pub struct NameParts<'a> {
     pub label: &'a str,
 }
 
-pub const TOKENS: &[(&str, &str)] = &[
-    ("{basename}", "Source name without the map suffix"),
-    ("{label}", "Preset output label, e.g. _MaskMap"),
-    ("{preset}", "Preset name"),
-    ("{date}", "Today, YYYY-MM-DD"),
-];
+/// Подстановки в шаблоне имени и что они значат — на языке интерфейса.
+pub fn tokens() -> [(&'static str, &'static str); 4] {
+    use crate::lang::t;
+    [
+        ("{basename}", t("Source name without the map suffix")),
+        ("{label}", t("Preset output label, e.g. _MaskMap")),
+        ("{preset}", t("Preset name")),
+        ("{date}", t("Today, YYYY-MM-DD")),
+    ]
+}
 
 /// Имя файла по шаблону, без расширения. Недопустимые в Windows символы
 /// заменяются на `_`.
@@ -109,10 +111,8 @@ pub fn render(template: &str, parts: &NameParts) -> String {
         .replace("{label}", parts.label)
         .replace("{preset}", &slug(parts.preset))
         .replace("{date}", &date);
-    let clean: String = name
-        .chars()
-        .map(|c| if c.is_control() || r#"<>:"/\|?*"#.contains(c) { '_' } else { c })
-        .collect();
+    let clean: String =
+        name.chars().map(|c| if c.is_control() || r#"<>:"/\|?*"#.contains(c) { '_' } else { c }).collect();
     let clean = clean.trim().trim_end_matches('.').to_owned();
     if clean.is_empty() { "packed".to_owned() } else { clean }
 }
@@ -170,11 +170,7 @@ mod tests {
 
     #[test]
     fn renders_template() {
-        let parts = NameParts {
-            basename: "Rock",
-            preset: "Unity HDRP — Mask Map",
-            label: "_MaskMap",
-        };
+        let parts = NameParts { basename: "Rock", preset: "Unity HDRP — Mask Map", label: "_MaskMap" };
         assert_eq!(render("{basename}{label}", &parts), "Rock_MaskMap");
         assert_eq!(render("{preset}/{basename}", &parts), "Unity_HDRP_Mask_Map_Rock");
         assert!(render("{basename}_{date}", &parts).starts_with("Rock_20"));

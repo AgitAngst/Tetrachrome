@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::lang::{fill, t};
 use crate::model::{Engine, Preset, SlotConfig};
 
 const FILE_NAME: &str = "presets.json";
@@ -29,10 +30,7 @@ pub fn inverse_source(role: &str) -> Option<&'static [&'static str]> {
 }
 
 fn slot(role: &str, suffixes: &[&str], fill: u8) -> SlotConfig {
-    SlotConfig {
-        fill,
-        ..SlotConfig::role(role, suffixes)
-    }
+    SlotConfig { fill, ..SlotConfig::role(role, suffixes) }
 }
 
 pub fn builtin() -> Vec<Preset> {
@@ -110,12 +108,7 @@ pub fn builtin() -> Vec<Preset> {
             Engine::Other,
             "_Packed",
             true,
-            [
-                SlotConfig::empty(0),
-                SlotConfig::empty(0),
-                SlotConfig::empty(0),
-                SlotConfig::empty(255),
-            ],
+            [SlotConfig::empty(0), SlotConfig::empty(0), SlotConfig::empty(0), SlotConfig::empty(255)],
         ),
     ]
 }
@@ -134,9 +127,7 @@ pub fn store_path() -> PathBuf {
             return portable;
         }
     }
-    let base = std::env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
+    let base = std::env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
     base.join("Tetrachrome").join(FILE_NAME)
 }
 
@@ -146,26 +137,23 @@ pub fn load(path: &Path) -> Result<Vec<Preset>, String> {
     let text = match std::fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(format!("Cannot read {}: {e}", path.display())),
+        Err(e) => return Err(fill(t("Cannot read {}: {}"), &[&path.display(), &e])),
     };
     let file: PresetFile =
-        serde_json::from_str(&text).map_err(|e| format!("Cannot parse {}: {e}", path.display()))?;
+        serde_json::from_str(&text).map_err(|e| fill(t("Cannot parse {}: {}"), &[&path.display(), &e]))?;
     Ok(file.presets)
 }
 
 pub fn save(path: &Path, presets: &[Preset]) -> Result<(), String> {
     if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("Cannot create {}: {e}", dir.display()))?;
+        std::fs::create_dir_all(dir).map_err(|e| fill(t("Cannot create {}: {}"), &[&dir.display(), &e]))?;
     }
-    let file = PresetFile {
-        version: 1,
-        presets: presets.iter().filter(|p| !p.builtin).cloned().collect(),
-    };
+    let file = PresetFile { version: 1, presets: presets.iter().filter(|p| !p.builtin).cloned().collect() };
     let text = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
     // Сначала во временный файл: оборвавшаяся запись не должна съесть пресеты.
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text).map_err(|e| format!("Cannot write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("Cannot write {}: {e}", path.display()))
+    std::fs::write(&tmp, text).map_err(|e| fill(t("Cannot write {}: {}"), &[&tmp.display(), &e]))?;
+    std::fs::rename(&tmp, path).map_err(|e| fill(t("Cannot write {}: {}"), &[&path.display(), &e]))
 }
 
 /// Имя, которого ещё нет в списке: «Name», «Name 2», «Name 3»…
@@ -174,10 +162,7 @@ pub fn unique_name(presets: &[Preset], wanted: &str) -> String {
     if !taken(wanted) {
         return wanted.to_owned();
     }
-    (2..)
-        .map(|n| format!("{wanted} {n}"))
-        .find(|name| !taken(name))
-        .expect("infinite range")
+    (2..).map(|n| format!("{wanted} {n}")).find(|name| !taken(name)).expect("infinite range")
 }
 
 #[cfg(test)]

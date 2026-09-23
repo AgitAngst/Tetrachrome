@@ -1,0 +1,221 @@
+# Русский перевод строк Tetrachrome: английская строка из кода <TAB> перевод.
+1 − value: roughness ⇄ smoothness	1 − значение: шероховатость ⇄ гладкость
+16-bit	16 бит
+8-bit	8 бит
+A preset with this name already exists	Пресет с таким именем уже есть
+About Tetrachrome	О Tetrachrome
+Add alpha channel	Добавить альфа-канал
+Add files…	Добавить файлы…
+Add folder…	Добавить папку…
+Add their suffixes to the preset's channels in the left panel.	Добавьте их суффиксы в каналы пресета на левой панели.
+Alpha channel	Альфа-канал
+Alpha is a constant {} — shown opaque	Альфа — постоянное {}: показано непрозрачным
+Assign at least one image, or set a custom size	Назначьте хотя бы одну картинку или задайте размер вручную
+Auto-assigns *{}*	Сам ловит *{}*
+BUILT-IN	ВСТРОЕННЫЙ
+Back to “next to sources”	Снова «рядом с исходниками»
+Batch	Пакет
+Batch finished: {} materials	Пакет готов: материалов — {}
+Batch finished: {} of {} failed	Пакет готов: не вышло {} из {}
+Bit depth	Разрядность
+Black	Чёрный
+Blue channel	Синий канал
+Browse…	Выбрать…
+Cancel	Отмена
+Cancelled	Отменено
+Cannot create {}: {}	Не удалось создать {}: {}
+Cannot parse {}: {}	Не удалось разобрать {}: {}
+Cannot read {}: {}	Не удалось прочитать {}: {}
+Cannot save settings: {}	Не удалось сохранить настройки: {}
+Cannot write {}: {}	Не удалось записать {}: {}
+Channels	Каналы
+Check for updates	Проверить обновления
+Choose an output folder	Выберите папку для результата
+Choose output folder	Выбрать папку для результата
+Clear	Очистить
+Clear all	Очистить всё
+Clear all channels	Очистить все каналы
+Clear this channel	Очистить канал
+Click for 100%	Щелчок — 100%
+Click to show in Explorer	Щелчок — показать в Проводнике
+Convert from sRGB to linear before packing. Use for maps authored as color textures.	Перевести из sRGB в линейное перед упаковкой. Для карт, нарисованных как цветные текстуры.
+Created preset “{}”	Создан пресет «{}»
+Custom	Свой
+Delete	Удалить
+Delete preset	Удалить пресет
+Delete “{}”?	Удалить «{}»?
+Deleted preset “{}”	Пресет «{}» удалён
+Delete…	Удалить…
+Discard	Не сохранять
+Dismiss	Закрыть
+Double-click	Двойной щелчок
+Drag or type 0–255	Тяните или введите 0–255
+Drop a folder or several maps onto the window — Tetrachrome sorts them into channels by name.	Бросьте в окно папку или несколько карт — Tetrachrome разложит их по каналам по именам.
+Drop a folder with maps here, or use “Add folder…”.	Бросьте сюда папку с картами или нажмите «Добавить папку…».
+Drop files or folders to add them to the batch	Отпустите файлы или папки — они добавятся в пакет
+Drop into {}	В канал {}
+Drop into {} · {}	В канал {} · {}
+Drop maps anywhere, or press Ctrl+O	Бросьте карты в окно или нажмите Ctrl+O
+Drop on a channel card, or anywhere to auto-assign	Отпустите на карточку канала или где угодно — разложится само
+Drop or click	Бросьте или щёлкните
+Drop {} files to auto-assign by name suffix	Отпустите {} файлов — разложатся по суффиксам имён
+Duplicate	Дублировать
+Duplicate a built-in preset or change one and save it to make your own.	Продублируйте встроенный пресет или измените и сохраните его — получится свой.
+Duplicate selected preset	Дублировать выбранный пресет
+Edit	Правка
+Engine	Движок
+Export	Экспорт
+Export (batch: process all)	Экспорт (в пакете — обработать всё)
+Export in progress	Экспорт уже идёт
+Exported {}	Сохранено: {}
+Exporting…	Экспорт…
+File	Файл
+File name	Имя файла
+Files whose names contain a suffix land in that channel automatically.	Файлы с суффиксом в имени сами попадают в этот канал.
+Fill value	Заливка
+Filled with a constant value	Залит постоянным значением
+Fit	Вписать
+Fit preview	Вписать предпросмотр
+Fit to panel  (Ctrl+0)	Вписать в панель  (Ctrl+0)
+Folder	Папка
+Format	Формат
+Gray	Серый
+Green channel	Зелёный канал
+Help	Справка
+Images	Картинки
+Inserted into the file name via the {label} token	Подставляется в имя файла вместо {label}
+Invert	Инвертировать
+Keyboard shortcuts	Сочетания клавиш
+Largest	Больший
+Linear · CPU	Линейно · CPU
+Load maps…	Загрузить карты…
+Loaded “{}”. Other materials went to the library ({}) — Batch mode packs them all at once.	Загружен «{}». Остальные материалы ушли в библиотеку ({}) — режим «Пакет» упакует их все разом.
+Loading {}…	Загружаю: {}…
+Log	Журнал
+MODIFIED	ИЗМЕНЁН
+Material	Материал
+Move down	Ниже
+Move up	Выше
+My presets	Мои пресеты
+Name	Имя
+New preset	Новый пресет
+Next to the first source	Рядом с первым исходником
+No file names match this preset's suffixes — pick maps from the library on each card	Ни одно имя файла не подходит под суффиксы пресета — выберите карты из библиотеки на каждой карточке
+No image	Нет картинки
+No new images found	Новых картинок не нашлось
+No supported images (PNG, TGA, TIFF, JPG, BMP, EXR)	Нет подходящих картинок (PNG, TGA, TIFF, JPG, BMP, EXR)
+Nothing loaded yet	Пока ничего не загружено
+Nothing to preview yet	Пока нечего показать
+Nothing to process	Нечего обрабатывать
+Nothing yet	Пока пусто
+Off: existing files are skipped	Выключено: существующие файлы пропускаются
+Off: the output is RGB	Выключено: результат в RGB
+Open folder	Открыть папку
+Open images	Открыть картинки
+Open images…	Открыть картинки…
+Open output folder	Открыть папку результата
+Other	Другое
+Output	Результат
+Output label	Метка результата
+Overwrite existing files	Перезаписывать существующие файлы
+Pack	Упаковка
+Packing {} materials into {}	Упаковываю материалы ({}) в {}
+Packs grayscale maps into the RGBA channels of one texture	Упаковывает серые карты в RGBA-каналы одной текстуры
+Pick from loaded images	Выбрать из загруженных
+Pick several maps of one material — they are assigned by name suffix	Выберите несколько карт одного материала — они разложатся по суффиксам имён
+Preset name	Имя пресета
+Preset output label, e.g. _MaskMap	Метка результата из пресета, например _MaskMap
+Preset settings	Настройки пресета
+Presets	Пресеты
+Presets file	Файл пресетов
+Process {}	Обработать: {}
+Quit	Выход
+Read from	Брать из
+Red channel	Красный канал
+Redo	Повторить
+Redo  (Ctrl+Y)	Повторить  (Ctrl+Y)
+Reload sources	Перечитать исходники
+Reload sources from disk	Перечитать исходники с диска
+Reloading sources from disk…	Перечитываю исходники с диска…
+Replace	Заменить
+Replace existing file?	Заменить существующий файл?
+Replace…	Заменить…
+Revert	Вернуть
+Revert changes	Отменить изменения
+Roles & auto-assign suffixes	Роли и суффиксы
+Save	Сохранить
+Save as new	Сохранить как новый
+Save as new preset	Сохранить как новый пресет
+Save changes	Сохранить изменения
+Save changes to “{}”?	Сохранить изменения в «{}»?
+Save preset changes	Сохранить изменения пресета
+Saved preset “{}”	Пресет «{}» сохранён
+Scale to largest	Под больший
+Scale to smallest	Под меньший
+Scroll to zoom · drag to pan · double-click to fit	Колесо — масштаб · тянуть — сдвиг · двойной щелчок — вписать
+Set the output size by hand	Задать размер результата вручную
+Settings	Настройки
+Settings differ from the saved preset. Ctrl+S to save.	Настройки отличаются от сохранённого пресета. Ctrl+S — сохранить.
+Settings…	Настройки…
+Show	Показать
+Show last export	Показать последний экспорт
+Show presets file	Показать файл пресетов
+Show this channel alone	Показать только этот канал
+Size	Размер
+Smallest	Меньший
+Source name without the map suffix	Имя исходника без суффикса карты
+Sources have different sizes	У исходников разный размер
+Status	Состояние
+Stop after current	Остановить после текущего
+Switching presets keeps your maps: Metallic follows Metallic, Roughness turns into inverted Smoothness.	При смене пресета карты остаются: Metallic идёт за Metallic, Roughness становится инвертированной Smoothness.
+TGA is always 8-bit	TGA — всегда 8 бит
+The output has no alpha channel.	В результате нет альфа-канала.
+The preset is removed from the presets file. This can't be undone.	Пресет удалится из файла пресетов. Это не отменить.
+This built-in preset can't be overwritten — the changes will be saved as a new preset.	Встроенный пресет не перезаписать — изменения сохранятся новым пресетом.
+Today, YYYY-MM-DD	Сегодня, ГГГГ-ММ-ДД
+Undo	Отменить
+Undo  (Ctrl+Z)	Отменить  (Ctrl+Z)
+Untitled	Без имени
+Unused	Не используется
+Unused — constant fill	Не используется — постоянная заливка
+Wheel / drag	Колесо / тянуть
+When sizes differ	Если размеры разные
+Which channel of the source image goes into this output channel. Lum = Rec.709 luminance.	Какой канал исходника идёт в этот канал результата. Lum — яркость по Rec.709.
+White	Белый
+Write alpha channel	Писать альфа-канал
+Write the alpha channel	Писать альфа-канал
+Your changes will be lost if you switch without saving.	Если переключиться без сохранения, изменения пропадут.
+Zoom / pan the preview	Масштаб / сдвиг предпросмотра
+Zoom in	Крупнее
+Zoom out	Мельче
+constant	постоянное
+constant {}	постоянное {}
+done	готово
+failed	ошибка
+from largest source	по большему исходнику
+from smallest source	по меньшему исходнику
+no maps	нет карт
+no size yet	размера пока нет
+no source images	нет исходных картинок
+not written — RGB output	не пишется — результат в RGB
+off	выкл.
+partial	не все
+ready	готов
+sRGB input	Вход в sRGB
+{}  (default)	{}  (по умолчанию)
+{}  (next to sources)	{}  (рядом с исходниками)
+{} added to the library — all channels are busy	{} — в библиотеке: все каналы заняты
+{} already exists in {}	{} уже есть в {}
+{} copy	{} (копия)
+{} duplicate maps ignored	Лишних дублей карт: {} — пропущены
+{} files matched no channel	Файлов без канала: {}
+{} loaded	Загружено: {}
+{} · {} · {} of {} channels from images · label {}	{} · {} · каналов из картинок: {} из {} · метка {}
+{} · {} · {} unmatched — maps are grouped by name and sorted into channels by the preset's suffixes	{} · {} · без канала: {} — карты группируются по имени и раскладываются по суффиксам пресета
+{} — click to append	{} — щелчок добавит в конец
+{} — they will be resampled.	{} — их пересчитают к одному размеру.
+{} — {} already taken	{} — {} уже занят
+{} ← inverted {}	{} ← инвертированная {}
+{}: {} exists, skipped	{}: {} уже есть, пропущено
+{}×{} is larger than the {} limit	{}×{} больше предела {}
+“packed” next to the sources	«packed» рядом с исходниками

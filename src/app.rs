@@ -3,17 +3,19 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, ColorImage, Key, KeyboardShortcut, Modifiers, TextureHandle, TextureOptions};
 
 use crate::batch::{self, LogLevel};
+use crate::lang::{self, fill, t};
 use crate::model::{Channel, OutputFormat, Preset, SizePolicy, SourceChannel};
 use crate::naming::{self, NameParts};
 use crate::pack::{self, SlotInput};
 use crate::presets;
+use crate::settings::{self, Settings};
 use crate::source::{self, Source};
 
 /// Сколько шагов помнит отмена.
@@ -42,7 +44,9 @@ pub enum LoadTarget {
     Slot(Channel),
     /// По суффиксу имени. `single` — файл один: без совпадения он займёт
     /// первый пустой канал.
-    Auto { single: bool },
+    Auto {
+        single: bool,
+    },
     /// Перечитать с диска картинку с этим id.
     Replace(u64),
     /// Только в библиотеку: карта другого материала.
@@ -142,8 +146,6 @@ pub enum Dialog {
     /// Переход на другой пресет, а в текущем несохранённые правки.
     SwitchPreset(usize),
     Overwrite(PathBuf),
-    About,
-    Shortcuts,
 }
 
 pub struct BatchRun {
@@ -196,6 +198,12 @@ pub struct App {
 
     pub toasts: Vec<Toast>,
     pub dialog: Option<Dialog>,
+    pub about_open: bool,
+    pub settings_open: bool,
+    pub shortcuts_open: bool,
+    pub settings: Settings,
+    settings_path: PathBuf,
+    pub updater: anvil_update::Updater,
     pub last_open_dir: Option<PathBuf>,
     /// Карточка канала, над которой сейчас несут файлы.
     pub drop_target: Option<Channel>,
@@ -207,28 +215,26 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        crate::theme::install(&cc.egui_ctx);
-
         let store = presets::store_path();
+        let settings_path = settings::path(&store);
+        let settings = settings::load(&settings_path);
+        anvil_ui::install(&cc.egui_ctx, crate::theme::ACCENT, settings.common.theme);
+        lang::set(&cc.egui_ctx, settings.common.language);
+        let updater = anvil_update::Updater::new(
+            anvil_update::Config::new("tetrachrome", env!("CARGO_PKG_VERSION"), "AgitAngst/Tetrachrome"),
+            cc.egui_ctx.clone(),
+        );
+
         let mut list = presets::builtin();
         let mut toasts = Vec::new();
         match presets::load(&store) {
             Ok(user) => list.extend(user),
-            Err(e) => toasts.push(Toast {
-                kind: ToastKind::Error,
-                text: e,
-                reveal: None,
-                born: Instant::now(),
-            }),
+            Err(e) => toasts.push(Toast { kind: ToastKind::Error, text: e, reveal: None, born: Instant::now() }),
         }
         // По умолчанию — HDRP Mask Map: самый полный из встроенных.
         let selected = list.iter().position(|p| p.label == "_MaskMap").unwrap_or(0);
         let work = list[selected].clone();
-        let settled = Snapshot {
-            selected,
-            work: work.clone(),
-            slots: Default::default(),
-        };
+        let settled = Snapshot { selected, work: work.clone(), slots: Default::default() };
         Self {
             presets: list,
             store,
@@ -244,12 +250,7 @@ impl App {
             loading: 0,
             mode: Mode::Pack,
             preview: Preview::default(),
-            view: View {
-                zoom: None,
-                pan: egui::Vec2::ZERO,
-                mode: ViewMode::Rgba,
-                fit_zoom: 1.0,
-            },
+            view: View { zoom: None, pan: egui::Vec2::ZERO, mode: ViewMode::Rgba, fit_zoom: 1.0 },
             output: OutputSettings {
                 template: "{basename}{label}".to_owned(),
                 format: OutputFormat::Png,
@@ -264,6 +265,12 @@ impl App {
             batch: BatchState::default(),
             toasts,
             dialog: None,
+            about_open: false,
+            settings_open: false,
+            shortcuts_open: false,
+            settings,
+            settings_path,
+            updater,
             last_open_dir: None,
             drop_target: None,
             card_rects: [None; 4],
@@ -331,7 +338,7 @@ impl App {
                     old_slots.iter().flatten().find(|s| naming::match_patterns(&s.stem(), opposite).is_some()).cloned()
                 });
                 if let Some(found) = found {
-                    notes.push(format!("{} ← inverted {}", self.work.slots[i].role, found.name));
+                    notes.push(fill(t("{} ← inverted {}"), &[&self.work.slots[i].role, &found.name]));
                     self.slots[i] = Some(found);
                     self.work.slots[i].invert = !self.work.slots[i].invert;
                 }
@@ -345,10 +352,7 @@ impl App {
     fn find_in_library<S: AsRef<str>>(&self, base: &str, suffixes: &[S]) -> Option<Arc<Source>> {
         self.library
             .iter()
-            .find(|s| {
-                naming::match_patterns(&s.stem(), suffixes)
-                    .is_some_and(|(_, b)| b.eq_ignore_ascii_case(base))
-            })
+            .find(|s| naming::match_patterns(&s.stem(), suffixes).is_some_and(|(_, b)| b.eq_ignore_ascii_case(base)))
             .cloned()
     }
 
@@ -366,28 +370,25 @@ impl App {
             .enumerate()
             .any(|(i, p)| i != self.selected && p.name.eq_ignore_ascii_case(&preset.name));
         if taken || preset.name.trim().is_empty() {
-            self.toast(ToastKind::Warning, "A preset with this name already exists".to_owned());
+            self.toast(ToastKind::Warning, t("A preset with this name already exists").to_owned());
             return;
         }
         self.presets[self.selected] = preset;
         self.persist();
-        self.toast(ToastKind::Success, format!("Saved preset “{}”", self.work.name));
+        self.toast(ToastKind::Success, fill(t("Saved preset “{}”"), &[&self.work.name]));
     }
 
     pub fn save_preset_as_new(&mut self) {
         let mut preset = self.work.clone();
         preset.builtin = false;
-        let wanted = if preset.name == self.current().name {
-            format!("{} copy", preset.name)
-        } else {
-            preset.name.clone()
-        };
+        let wanted =
+            if preset.name == self.current().name { fill(t("{} copy"), &[&preset.name]) } else { preset.name.clone() };
         preset.name = presets::unique_name(&self.presets, wanted.trim());
         self.work.name = preset.name.clone();
         self.presets.push(preset);
         self.selected = self.presets.len() - 1;
         self.persist();
-        self.toast(ToastKind::Success, format!("Created preset “{}”", self.work.name));
+        self.toast(ToastKind::Success, fill(t("Created preset “{}”"), &[&self.work.name]));
     }
 
     pub fn revert_preset(&mut self) {
@@ -395,10 +396,7 @@ impl App {
     }
 
     pub fn new_preset(&mut self) {
-        let preset = Preset {
-            name: presets::unique_name(&self.presets, "New preset"),
-            ..Preset::default()
-        };
+        let preset = Preset { name: presets::unique_name(&self.presets, t("New preset")), ..Preset::default() };
         self.presets.push(preset);
         self.persist();
         let index = self.presets.len() - 1;
@@ -409,7 +407,7 @@ impl App {
     pub fn duplicate_preset(&mut self) {
         let mut preset = self.work.clone();
         preset.builtin = false;
-        preset.name = presets::unique_name(&self.presets, &format!("{} copy", self.current().name));
+        preset.name = presets::unique_name(&self.presets, &fill(t("{} copy"), &[&self.current().name]));
         self.presets.push(preset.clone());
         self.selected = self.presets.len() - 1;
         self.work = preset;
@@ -429,7 +427,7 @@ impl App {
         } else if self.selected > index {
             self.selected -= 1;
         }
-        self.toast(ToastKind::Info, format!("Deleted preset “{name}”"));
+        self.toast(ToastKind::Info, fill(t("Deleted preset “{}”"), &[&name]));
     }
 
     /// Сдвинуть пользовательский пресет вверх или вниз среди пользовательских.
@@ -466,7 +464,7 @@ impl App {
     pub fn open_files(&mut self, paths: Vec<PathBuf>, target: LoadTarget) {
         let paths: Vec<PathBuf> = paths.into_iter().filter(|p| source::is_image(p)).collect();
         if paths.is_empty() {
-            self.toast(ToastKind::Warning, "No supported images (PNG, TGA, TIFF, JPG, BMP, EXR)".to_owned());
+            self.toast(ToastKind::Warning, t("No supported images (PNG, TGA, TIFF, JPG, BMP, EXR)").to_owned());
             return;
         }
         if let Some(dir) = paths[0].parent() {
@@ -519,7 +517,7 @@ impl App {
             self.open_files(files, LoadTarget::Library);
             self.toast(
                 ToastKind::Warning,
-                "No file names match this preset's suffixes — pick maps from the library on each card".to_owned(),
+                t("No file names match this preset's suffixes — pick maps from the library on each card").to_owned(),
             );
             return;
         };
@@ -533,10 +531,9 @@ impl App {
         if others > 0 {
             self.toast(
                 ToastKind::Info,
-                format!(
-                    "Loaded “{}”. {others} more material{} went to the library — Batch mode packs them all at once.",
-                    best.base,
-                    if others == 1 { "" } else { "s" }
+                fill(
+                    t("Loaded “{}”. Other materials went to the library ({}) — Batch mode packs them all at once."),
+                    &[&best.base, &others],
                 ),
             );
         }
@@ -602,7 +599,7 @@ impl App {
                         Some(channel) => self.slots[channel.index()] = Some(src),
                         None => self.toast(
                             ToastKind::Info,
-                            format!("{} added to the library — all channels are busy", src.name),
+                            fill(t("{} added to the library — all channels are busy"), &[&src.name]),
                         ),
                     }
                 }
@@ -630,7 +627,7 @@ impl App {
             self.library.retain(|s| s.id != src.id);
             self.open_files(vec![src.path.clone()], LoadTarget::Replace(src.id));
         }
-        self.toast(ToastKind::Info, "Reloading sources from disk…".to_owned());
+        self.toast(ToastKind::Info, t("Reloading sources from disk…").to_owned());
     }
 
     pub fn clear_slot(&mut self, channel: Channel) {
@@ -653,11 +650,7 @@ impl App {
 
     /// Размеры картинок в каналах, которые попадут в файл.
     pub fn source_sizes(&self) -> Vec<(u32, u32)> {
-        self.work
-            .channels()
-            .iter()
-            .filter_map(|c| self.slots[c.index()].as_ref().map(|s| s.size()))
-            .collect()
+        self.work.channels().iter().filter_map(|c| self.slots[c.index()].as_ref().map(|s| s.size())).collect()
     }
 
     pub fn sizes_differ(&self) -> bool {
@@ -729,7 +722,7 @@ impl App {
         let alpha = self.alpha_visible();
         match self.view.mode {
             ViewMode::Rgba | ViewMode::Rgb => {
-                for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+                for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                     px[0] = pack::to_u8(planes[0][i]);
                     px[1] = pack::to_u8(planes[1][i]);
                     px[2] = pack::to_u8(planes[2][i]);
@@ -739,7 +732,7 @@ impl App {
                 }
             }
             ViewMode::Channel(c) => {
-                for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+                for (i, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                     let v = pack::to_u8(planes[c.index()][i]);
                     px[0] = v;
                     px[1] = v;
@@ -770,41 +763,34 @@ impl App {
 
     /// Общее имя материала для `{basename}`.
     pub fn basename(&self) -> String {
-        basename_of(&self.slots, &self.work).unwrap_or_else(|| "Untitled".to_owned())
+        basename_of(&self.slots, &self.work).unwrap_or_else(|| t("Untitled").to_owned())
     }
 
     pub fn output_name(&self) -> String {
         let name = naming::render(
             &self.output.template,
-            &NameParts {
-                basename: &self.basename(),
-                preset: &self.work.name,
-                label: &self.work.label,
-            },
+            &NameParts { basename: &self.basename(), preset: &self.work.name, label: &self.work.label },
         );
         format!("{name}.{}", self.output.format.extension())
     }
 
     /// Папка результата: выбранная или рядом с первым исходником.
     pub fn output_dir(&self) -> Option<PathBuf> {
-        self.output.folder.clone().or_else(|| {
-            self.slots
-                .iter()
-                .flatten()
-                .next()
-                .and_then(|s| s.path.parent().map(Path::to_path_buf))
-        })
+        self.output
+            .folder
+            .clone()
+            .or_else(|| self.slots.iter().flatten().next().and_then(|s| s.path.parent().map(Path::to_path_buf)))
     }
 
     pub fn can_export(&self) -> Result<(), &'static str> {
         if self.export.is_some() {
-            return Err("Export in progress");
+            return Err(t("Export in progress"));
         }
         if self.target_size().is_none() {
-            return Err("Assign at least one image, or set a custom size");
+            return Err(t("Assign at least one image, or set a custom size"));
         }
         if self.output_dir().is_none() {
-            return Err("Choose an output folder");
+            return Err(t("Choose an output folder"));
         }
         Ok(())
     }
@@ -843,11 +829,11 @@ impl App {
                 fill: configs[i].fill,
             });
             let result = std::fs::create_dir_all(&dir)
-                .map_err(|e| format!("Cannot create {}: {e}", dir.display()))
+                .map_err(|e| fill(t("Cannot create {}: {}"), &[&dir.display(), &e]))
                 .and_then(|()| {
                     pack::pack(&slots, alpha, size, sixteen)
                         .save_with_format(&path, format.image_format())
-                        .map_err(|e| format!("Cannot write {}: {e}", path.display()))
+                        .map_err(|e| fill(t("Cannot write {}: {}"), &[&path.display(), &e]))
                 })
                 .map(|()| path);
             let _ = tx.send(result);
@@ -858,14 +844,16 @@ impl App {
 
     fn poll_export(&mut self) {
         let Some(job) = &self.export else { return };
-        let Ok(result) = job.rx.try_recv() else { return };
+        let Ok(result) = job.rx.try_recv() else {
+            return;
+        };
         let name = job.name.clone();
         self.export = None;
         match result {
             Ok(path) => {
                 self.toasts.push(Toast {
                     kind: ToastKind::Success,
-                    text: format!("Exported {name}"),
+                    text: fill(t("Exported {}"), &[&name]),
                     reveal: Some(path.clone()),
                     born: Instant::now(),
                 });
@@ -887,7 +875,7 @@ impl App {
         self.batch.plan_key = None;
         let added = self.batch.files.len() - before;
         if added == 0 {
-            self.toast(ToastKind::Info, "No new images found".to_owned());
+            self.toast(ToastKind::Info, t("No new images found").to_owned());
         }
     }
 
@@ -928,11 +916,11 @@ impl App {
         }
         let groups = self.batch_enabled();
         let Some(out_dir) = self.batch_out_dir() else {
-            self.toast(ToastKind::Warning, "Choose an output folder".to_owned());
+            self.toast(ToastKind::Warning, t("Choose an output folder").to_owned());
             return;
         };
         if groups.is_empty() {
-            self.toast(ToastKind::Warning, "Nothing to process".to_owned());
+            self.toast(ToastKind::Warning, t("Nothing to process").to_owned());
             return;
         }
         let bases: Vec<String> = groups.iter().map(|g| g.base.clone()).collect();
@@ -955,16 +943,10 @@ impl App {
         self.batch.log.clear();
         self.batch.status.clear();
         self.batch.finished_dir = None;
-        self.batch.log.push((
-            LogLevel::Info,
-            format!("Packing {} materials into {}", bases.len(), out_dir.display()),
-        ));
-        self.batch.run = Some(BatchRun {
-            progress,
-            rx,
-            total: bases.len(),
-            bases,
-        });
+        self.batch
+            .log
+            .push((LogLevel::Info, fill(t("Packing {} materials into {}"), &[&bases.len(), &out_dir.display()])));
+        self.batch.run = Some(BatchRun { progress, rx, total: bases.len(), bases });
         self.last_export = Some(out_dir);
     }
 
@@ -992,27 +974,18 @@ impl App {
             self.batch.run = None;
             self.batch.finished_dir = self.last_export.clone();
             let (kind, text) = if failed == 0 {
-                (ToastKind::Success, format!("Batch finished: {done} materials"))
+                (ToastKind::Success, fill(t("Batch finished: {} materials"), &[&done]))
             } else {
-                (ToastKind::Warning, format!("Batch finished: {failed} of {done} failed"))
+                (ToastKind::Warning, fill(t("Batch finished: {} of {} failed"), &[&failed, &done]))
             };
-            self.toasts.push(Toast {
-                kind,
-                text,
-                reveal: self.batch.finished_dir.clone(),
-                born: Instant::now(),
-            });
+            self.toasts.push(Toast { kind, text, reveal: self.batch.finished_dir.clone(), born: Instant::now() });
         }
     }
 
     // ---------------------------------------------------------------- отмена
 
     fn snapshot(&self) -> Snapshot {
-        Snapshot {
-            selected: self.selected,
-            work: self.work.clone(),
-            slots: self.slots.clone(),
-        }
+        Snapshot { selected: self.selected, work: self.work.clone(), slots: self.slots.clone() }
     }
 
     fn restore(&mut self, snap: &Snapshot) {
@@ -1064,13 +1037,15 @@ impl App {
 
     // ---------------------------------------------------------------- прочее
 
+    /// Сохранить настройки. Не вышло — сказать, но окно не ломать.
+    pub fn save_settings(&mut self) {
+        if let Err(e) = settings::save(&self.settings_path, &self.settings) {
+            self.toast(ToastKind::Error, fill(t("Cannot save settings: {}"), &[&e]));
+        }
+    }
+
     pub fn toast(&mut self, kind: ToastKind, text: String) {
-        self.toasts.push(Toast {
-            kind,
-            text,
-            reveal: None,
-            born: Instant::now(),
-        });
+        self.toasts.push(Toast { kind, text, reveal: None, born: Instant::now() });
     }
 
     fn expire_toasts(&mut self, ctx: &egui::Context) {
@@ -1082,7 +1057,7 @@ impl App {
     }
 
     pub fn pick_images(&mut self, target: LoadTarget) {
-        let mut dialog = rfd::FileDialog::new().add_filter("Images", source::EXTENSIONS);
+        let mut dialog = rfd::FileDialog::new().add_filter(t("Images"), source::EXTENSIONS);
         if let Some(dir) = &self.last_open_dir {
             dialog = dialog.set_directory(dir);
         }
@@ -1111,7 +1086,7 @@ impl App {
     fn shortcuts(&mut self, ctx: &egui::Context) {
         let typing = ctx.egui_wants_keyboard_input();
         let shortcut = |m, k| KeyboardShortcut::new(m, k);
-        let (export, open, undo, redo, redo2, save, reload, fit) = ctx.input_mut(|i| {
+        let (export, open, undo, redo, redo2, save, reload, fit, settings) = ctx.input_mut(|i| {
             (
                 i.consume_shortcut(&shortcut(Modifiers::COMMAND, Key::E)),
                 i.consume_shortcut(&shortcut(Modifiers::COMMAND, Key::O)),
@@ -1121,10 +1096,14 @@ impl App {
                 i.consume_shortcut(&shortcut(Modifiers::COMMAND, Key::S)),
                 i.consume_shortcut(&shortcut(Modifiers::NONE, Key::F5)),
                 !typing && i.consume_shortcut(&shortcut(Modifiers::COMMAND, Key::Num0)),
+                i.consume_shortcut(&shortcut(Modifiers::COMMAND, Key::Comma)),
             )
         });
-        if self.dialog.is_some() {
+        if self.dialog.is_some() || self.about_open || self.settings_open || self.shortcuts_open {
             return;
+        }
+        if settings {
+            self.settings_open = true;
         }
         if export {
             match self.mode {
@@ -1136,7 +1115,8 @@ impl App {
             match self.mode {
                 Mode::Pack => self.pick_images(LoadTarget::Auto { single: true }),
                 Mode::Batch => {
-                    if let Some(files) = rfd::FileDialog::new().add_filter("Images", source::EXTENSIONS).pick_files() {
+                    if let Some(files) = rfd::FileDialog::new().add_filter(t("Images"), source::EXTENSIONS).pick_files()
+                    {
                         self.batch_add(files);
                     }
                 }
@@ -1168,11 +1148,8 @@ impl App {
         } else {
             None
         };
-        self.drop_target = pos.and_then(|p| {
-            Channel::ALL
-                .into_iter()
-                .find(|c| self.card_rects[c.index()].is_some_and(|r| r.contains(p)))
-        });
+        self.drop_target = pos
+            .and_then(|p| Channel::ALL.into_iter().find(|c| self.card_rects[c.index()].is_some_and(|r| r.contains(p))));
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
         if dropped.is_empty() {
             return;
@@ -1200,6 +1177,7 @@ impl eframe::App for App {
         self.take_dropped(ctx);
         self.shortcuts(ctx);
         self.expire_toasts(ctx);
+        self.updater.auto(&self.settings.common);
         if self.mode == Mode::Batch {
             self.refresh_plan();
         }
@@ -1217,27 +1195,18 @@ impl eframe::App for App {
         self.settle(&ctx);
     }
 
-    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        let c = crate::theme::Palette::DARK.bg;
-        egui::Rgba::from(c).to_array()
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        anvil_ui::chrome::clear_color(visuals, crate::theme::ACCENT)
     }
 }
 
 /// Уведомление с кнопкой живёт дольше: до кнопки ещё надо дотянуться.
 fn extra(toast: &Toast) -> Duration {
-    if toast.reveal.is_some() || toast.kind == ToastKind::Error {
-        Duration::from_secs(4)
-    } else {
-        Duration::ZERO
-    }
+    if toast.reveal.is_some() || toast.kind == ToastKind::Error { Duration::from_secs(4) } else { Duration::ZERO }
 }
 
 fn basename_of(slots: &[Option<Arc<Source>>; 4], preset: &Preset) -> Option<String> {
-    slots
-        .iter()
-        .flatten()
-        .next()
-        .map(|s| naming::base_name(&s.stem(), preset))
+    slots.iter().flatten().next().map(|s| naming::base_name(&s.stem(), preset))
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {

@@ -4,9 +4,13 @@ version = "0.1.0"
 edition = "2024"
 description = "Texture channel packer for game artists"
 license = "MIT"
+repository = "https://github.com/AgitAngst/Tetrachrome"
 publish = false
 
 [dependencies]
+# Общий вид и обновления семьи Anvil. Правка набора на живую — `[patch]` в .cargo/config.toml (не в git).
+anvil-ui = { git = "https://github.com/AgitAngst/Anvil", rev = "ebb7f92cb65da53b66238d91bf3a81afd1105ef8", features = ["serde"] }
+anvil-update = { git = "https://github.com/AgitAngst/Anvil", rev = "ebb7f92cb65da53b66238d91bf3a81afd1105ef8" }
 eframe = "0.36.2"
 image = { version = "0.25.10", default-features = false, features = ["png", "tga", "tiff", "jpeg", "bmp", "exr", "rayon"] }
 rfd = "0.17.2"
@@ -19,6 +23,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
+anvil-ui = { git = "https://github.com/AgitAngst/Anvil", rev = "ebb7f92cb65da53b66238d91bf3a81afd1105ef8" }
 image = { version = "0.25.10", default-features = false, features = ["png", "ico"] }
 winresource = "0.1"
 

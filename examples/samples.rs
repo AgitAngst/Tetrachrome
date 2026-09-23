@@ -17,7 +17,9 @@ fn main() {
             Luma([(v.clamp(0.0, 1.0) * 255.0) as u8])
         })
     };
-    let tiles = |u: f32, v: f32| if ((u * 8.0) as i32 + (v * 8.0) as i32) % 2 == 0 { 1.0 } else { 0.0 };
+    let tiles = |u: f32, v: f32| {
+        if ((u * 8.0) as i32 + (v * 8.0) as i32) % 2 == 0 { 1.0 } else { 0.0 }
+    };
     let rings = |u: f32, v: f32| {
         let d = ((u - 0.5).powi(2) + (v - 0.5).powi(2)).sqrt();
         0.5 + 0.5 * (d * 40.0).sin()
@@ -29,9 +31,11 @@ fn main() {
     gray(1024, &ao).save(dir.join("Rock_AO.png")).unwrap();
     gray(1024, &rings).save(dir.join("Rock_Roughness.png")).unwrap();
     gray(1024, &|u, v| 1.0 - rings(u, v)).save(dir.join("Rock_Smoothness.png")).unwrap();
-    gray(1024, &|u, v| if (u - 0.3).abs() < 0.2 && (v - 0.6).abs() < 0.25 { 1.0 } else { 0.0 })
-        .save(dir.join("Rock_DetailMask.png"))
-        .unwrap();
+    gray(1024, &|u, v| {
+        if (u - 0.3).abs() < 0.2 && (v - 0.6).abs() < 0.25 { 1.0 } else { 0.0 }
+    })
+    .save(dir.join("Rock_DetailMask.png"))
+    .unwrap();
 
     gray(512, &gradient).save(dir.join("Wood_Metal.png")).unwrap();
     gray(512, &|u, v| 0.5 + 0.5 * (v * 30.0 + u * 4.0).sin()).save(dir.join("Wood_Rough.png")).unwrap();

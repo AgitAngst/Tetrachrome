@@ -41,13 +41,8 @@ pub enum SourceChannel {
 }
 
 impl SourceChannel {
-    pub const ALL: [SourceChannel; 5] = [
-        SourceChannel::R,
-        SourceChannel::G,
-        SourceChannel::B,
-        SourceChannel::A,
-        SourceChannel::Lum,
-    ];
+    pub const ALL: [SourceChannel; 5] =
+        [SourceChannel::R, SourceChannel::G, SourceChannel::B, SourceChannel::A, SourceChannel::Lum];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -78,7 +73,7 @@ impl Engine {
             Engine::Unity => "Unity",
             Engine::Unreal => "Unreal",
             Engine::Godot => "Godot",
-            Engine::Other => "Other",
+            Engine::Other => crate::lang::t("Other"),
         }
     }
 }
@@ -117,18 +112,11 @@ impl Default for SlotConfig {
 
 impl SlotConfig {
     pub fn role(role: &str, suffixes: &[&str]) -> Self {
-        Self {
-            role: role.to_owned(),
-            suffixes: suffixes.iter().map(|s| (*s).to_owned()).collect(),
-            ..Self::default()
-        }
+        Self { role: role.to_owned(), suffixes: suffixes.iter().map(|s| (*s).to_owned()).collect(), ..Self::default() }
     }
 
     pub fn empty(fill: u8) -> Self {
-        Self {
-            fill,
-            ..Self::default()
-        }
+        Self { fill, ..Self::default() }
     }
 }
 
@@ -152,16 +140,11 @@ pub struct Preset {
 impl Default for Preset {
     fn default() -> Self {
         Self {
-            name: "New preset".to_owned(),
+            name: crate::lang::t("New preset").to_owned(),
             engine: Engine::Other,
             label: "_Packed".to_owned(),
             alpha: true,
-            slots: [
-                SlotConfig::empty(0),
-                SlotConfig::empty(0),
-                SlotConfig::empty(0),
-                SlotConfig::empty(255),
-            ],
+            slots: [SlotConfig::empty(0), SlotConfig::empty(0), SlotConfig::empty(0), SlotConfig::empty(255)],
             builtin: false,
         }
     }
@@ -179,11 +162,7 @@ impl Preset {
 
     /// Каналы, которые попадут в файл.
     pub fn channels(&self) -> &'static [Channel] {
-        if self.alpha {
-            &Channel::ALL
-        } else {
-            &Channel::ALL[..3]
-        }
+        if self.alpha { &Channel::ALL } else { &Channel::ALL[..3] }
     }
 }
 

@@ -4,30 +4,27 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
-mod appicon;
 mod batch;
-mod icons;
+mod lang;
 mod model;
 mod naming;
 mod pack;
 mod platform;
 mod presets;
+mod settings;
 mod source;
 mod theme;
 mod ui;
 
 fn main() -> eframe::Result<()> {
-    let icon = eframe::egui::IconData {
-        rgba: appicon::render_icon(64),
-        width: 64,
-        height: 64,
-    };
+    // Следы прошлого обновления (*.old-…, папка загрузки) — прочь.
+    anvil_update::cleanup();
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Tetrachrome")
             .with_inner_size([1480.0, 920.0])
             .with_min_inner_size([1060.0, 640.0])
-            .with_icon(std::sync::Arc::new(icon))
+            .with_icon(std::sync::Arc::new(anvil_ui::appicon::icon_data(theme::ACCENT, anvil_ui::Icon::Tiles)))
             .with_drag_and_drop(true),
         centered: true,
         ..Default::default()

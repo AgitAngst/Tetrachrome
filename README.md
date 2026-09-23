@@ -18,6 +18,12 @@ grayscale-карт (Metallic, AO, Roughness, Smoothness, Detail Mask…) в RGBA
 - Разные размеры исходников: масштаб к большему, к меньшему или свой размер
 - Пакетный режим: папка карт → материалы по именам → упаковка всех, с прогрессом и журналом
 - Отмена/повтор (Ctrl+Z / Ctrl+Y), Ctrl+O, Ctrl+E, Ctrl+S, F5 — перечитать исходники
+- Светлая и тёмная темы (предпросмотр всегда на тёмном), английский и русский — «Файл → Настройки…» (Ctrl+,);
+  настройки — в `settings.json` рядом с `presets.json`
+- Сам узнаёт о новых версиях на GitHub и обновляется из окна (с проверкой SHA-256); выключается в настройках
+
+Вид и обновления — общие для программ семьи [Anvil](https://github.com/AgitAngst/Anvil) (`anvil-ui`,
+`anvil-update`).
 
 ## Сборка
 
@@ -27,5 +33,8 @@ cargo build --release
 
 Результат — `target\release\tetrachrome.exe`. Тестовые карты для проверки:
 `cargo run --example samples -- <папка>`.
+
+Выпуск — тег `vX.Y.Z` (лучше из мастера выпуска Anvil): workflow `release.yml` соберёт
+`tetrachrome-X.Y.Z-windows-x64.zip` с `SHA256SUMS` и опубликует GitHub Release.
 
 Полное ТЗ — [SPEC.md](SPEC.md), планы — [TODO.md](TODO.md).

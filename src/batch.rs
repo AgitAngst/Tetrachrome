@@ -8,6 +8,7 @@ use std::sync::mpsc::Sender;
 
 use image::{DynamicImage, GenericImageView};
 
+use crate::lang::{fill, t};
 use crate::model::{Channel, OutputFormat, Preset, SizePolicy};
 use crate::naming::{self, NameParts};
 use crate::pack::{self, SlotInput};
@@ -43,10 +44,7 @@ pub fn plan(files: &[PathBuf], preset: &Preset) -> Plan {
         let base = if m.base.is_empty() { stem.clone() } else { m.base };
         let key = base.to_lowercase();
         let at = *index.entry(key).or_insert_with(|| {
-            plan.groups.push(Group {
-                base: base.clone(),
-                files: Default::default(),
-            });
+            plan.groups.push(Group { base: base.clone(), files: Default::default() });
             plan.groups.len() - 1
         });
         let slot = &mut plan.groups[at].files[m.channel.index()];
@@ -125,14 +123,14 @@ pub fn run(job: Job, progress: Arc<Progress>, events: Sender<Event>, repaint: im
         repaint();
     };
     if let Err(e) = std::fs::create_dir_all(&job.out_dir) {
-        log(LogLevel::Error, format!("Cannot create {}: {e}", job.out_dir.display()));
+        log(LogLevel::Error, fill(t("Cannot create {}: {}"), &[&job.out_dir.display(), &e]));
         let _ = events.send(Event::Finished);
         repaint();
         return;
     }
     for (i, group) in job.groups.iter().enumerate() {
         if progress.cancel.load(Ordering::Relaxed) {
-            log(LogLevel::Warn, "Cancelled".to_owned());
+            log(LogLevel::Warn, t("Cancelled").to_owned());
             break;
         }
         let ok = match process(&job, group) {
@@ -141,7 +139,7 @@ pub fn run(job: Job, progress: Arc<Progress>, events: Sender<Event>, repaint: im
                 true
             }
             Ok(Outcome::Skipped(path)) => {
-                log(LogLevel::Warn, format!("{}: {} exists, skipped", group.base, source::display_name(&path)));
+                log(LogLevel::Warn, fill(t("{}: {} exists, skipped"), &[&group.base, &source::display_name(&path)]));
                 true
             }
             Err(e) => {
@@ -165,11 +163,7 @@ enum Outcome {
 fn process(job: &Job, group: &Group) -> Result<Outcome, String> {
     let name = naming::render(
         &job.template,
-        &NameParts {
-            basename: &group.base,
-            preset: &job.preset.name,
-            label: &job.preset.label,
-        },
+        &NameParts { basename: &group.base, preset: &job.preset.name, label: &job.preset.label },
     );
     let path = job.out_dir.join(format!("{name}.{}", job.format.extension()));
     if path.exists() && !job.overwrite {
@@ -183,7 +177,7 @@ fn process(job: &Job, group: &Group) -> Result<Outcome, String> {
         }
     }
     let sizes: Vec<(u32, u32)> = loaded.values().map(GenericImageView::dimensions).collect();
-    let size = pack::target_size(&sizes, job.policy, job.custom).ok_or("no source images")?;
+    let size = pack::target_size(&sizes, job.policy, job.custom).ok_or(t("no source images"))?;
     let slots: [SlotInput; 4] = std::array::from_fn(|i| {
         let config = &job.preset.slots[i];
         SlotInput {
@@ -197,7 +191,7 @@ fn process(job: &Job, group: &Group) -> Result<Outcome, String> {
     let image = pack::pack(&slots, job.preset.alpha, size, job.sixteen && job.format.supports_16bit());
     image
         .save_with_format(&path, job.format.image_format())
-        .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        .map_err(|e| fill(t("Cannot write {}: {}"), &[&path.display(), &e]))?;
     Ok(Outcome::Written(path, size))
 }
 

@@ -19,11 +19,7 @@ pub struct SlotInput<'a> {
 
 /// sRGB → линейное, точная кривая IEC 61966-2-1.
 pub fn srgb_to_linear(v: f32) -> f32 {
-    if v <= 0.04045 {
-        v / 12.92
-    } else {
-        ((v + 0.055) / 1.055).powf(2.4)
-    }
+    if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
 }
 
 /// Размер результата по размерам исходников. `None` — исходников нет, а размер
@@ -40,10 +36,7 @@ pub fn target_size(sizes: &[(u32, u32)], policy: SizePolicy, custom: (u32, u32))
 /// Размер предпросмотра: результат, вписанный в `PREVIEW_MAX`.
 pub fn preview_size((w, h): (u32, u32)) -> (u32, u32) {
     let scale = (PREVIEW_MAX as f32 / w.max(h) as f32).min(1.0);
-    (
-        ((w as f32 * scale).round() as u32).max(1),
-        ((h as f32 * scale).round() as u32).max(1),
-    )
+    (((w as f32 * scale).round() as u32).max(1), ((h as f32 * scale).round() as u32).max(1))
 }
 
 /// Один канал размером `w`×`h`: чтение, перевод из sRGB, масштаб, инверсия.
@@ -188,13 +181,7 @@ mod tests {
     use image::{GrayImage, Rgb, RgbImage, Rgba, RgbaImage};
 
     fn slot(image: Option<&DynamicImage>, source: SourceChannel) -> SlotInput<'_> {
-        SlotInput {
-            image,
-            source,
-            srgb: false,
-            invert: false,
-            fill: 0,
-        }
+        SlotInput { image, source, srgb: false, invert: false, fill: 0 }
     }
 
     #[test]

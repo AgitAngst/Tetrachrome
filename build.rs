@@ -1,14 +1,12 @@
-//! Значок exe: рисуется тем же кодом, что и значок окна, и вшивается ресурсом.
+//! Значок exe: знак семьи Anvil (бирюза и четыре плитки) — тот же, что в окне и в шапке.
 
 use std::path::PathBuf;
 
+use anvil_ui::{Accent, Icon};
 use image::ExtendedColorType;
 use image::codecs::ico::{IcoEncoder, IcoFrame};
 
-include!("src/appicon.rs");
-
 fn main() {
-    println!("cargo:rerun-if-changed=src/appicon.rs");
     println!("cargo:rerun-if-changed=build.rs");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
@@ -18,11 +16,11 @@ fn main() {
     let frames: Vec<IcoFrame> = [16u32, 24, 32, 48, 64, 128, 256]
         .iter()
         .map(|&size| {
-            IcoFrame::as_png(&render_icon(size), size, size, ExtendedColorType::Rgba8).expect("icon frame")
+            let rgba = anvil_ui::appicon::rgba(Accent::TEAL, Icon::Tiles, size);
+            IcoFrame::as_png(&rgba, size, size, ExtendedColorType::Rgba8).expect("icon frame")
         })
         .collect();
-    let file = std::fs::File::create(&ico).expect("create icon");
-    IcoEncoder::new(file).encode_images(&frames).expect("write icon");
+    IcoEncoder::new(std::fs::File::create(&ico).expect("create icon")).encode_images(&frames).expect("write icon");
 
     let mut res = winresource::WindowsResource::new();
     res.set_icon(ico.to_str().expect("utf-8 path"));
