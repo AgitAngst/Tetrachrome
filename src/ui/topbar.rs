@@ -167,14 +167,15 @@ fn menus(app: &mut App, ui: &mut Ui) {
 
 fn zoom_controls(app: &mut App, ui: &mut Ui) {
     let p = Palette::of(ui);
+    let ctx = ui.ctx().clone();
     if theme::icon_button(ui, Icon::Expand, 30.0, t("Fit to panel  (Ctrl+0)")).clicked() {
-        app.view.zoom = None;
-        app.view.pan = Vec2::ZERO;
+        app.view.fit(&ctx);
     }
     if theme::icon_button(ui, Icon::Plus, 30.0, t("Zoom in")).clicked() {
-        zoom_step(app, true);
+        zoom_step(app, &ctx, true);
     }
-    let current = app.view.zoom.unwrap_or(app.view.fit_zoom);
+    // Пока идёт плавный переход, число бежит вместе с картинкой.
+    let current = if app.view.from.is_some() { app.view.shown.0 } else { app.view.zoom.unwrap_or(app.view.fit_zoom) };
     let label = if app.view.zoom.is_none() {
         format!("{} · {:.0}%", t("Fit"), current * 100.0)
     } else {
@@ -185,19 +186,21 @@ fn zoom_controls(app: &mut App, ui: &mut Ui) {
         egui::Label::new(egui::RichText::new(label).size(12.5).color(p.weak)).sense(egui::Sense::click()),
     );
     if r.on_hover_text(t("Click for 100%")).clicked() {
+        app.view.glide(&ctx);
         app.view.zoom = Some(1.0);
         app.view.pan = Vec2::ZERO;
     }
     if theme::icon_button(ui, Icon::Minus, 30.0, t("Zoom out")).clicked() {
-        zoom_step(app, false);
+        zoom_step(app, &ctx, false);
     }
 }
 
 /// Ступени масштаба: удобные числа, а не «×1.1» до бесконечности.
 const STEPS: &[f32] = &[0.0625, 0.125, 0.25, 0.33, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 32.0];
 
-pub fn zoom_step(app: &mut App, up: bool) {
+pub fn zoom_step(app: &mut App, ctx: &egui::Context, up: bool) {
     let current = app.view.zoom.unwrap_or(app.view.fit_zoom);
+    app.view.glide(ctx);
     let next = if up {
         STEPS.iter().copied().find(|s| *s > current * 1.01).unwrap_or(32.0)
     } else {

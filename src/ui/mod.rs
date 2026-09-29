@@ -9,6 +9,7 @@ mod slots;
 mod topbar;
 
 use anvil_ui::chrome::{self, AboutAction, AppInfo};
+use anvil_ui::motion::{self, Motion};
 use anvil_ui::theme::radius;
 use anvil_ui::widgets as w;
 use anvil_ui::{Icon, Kind, Palette, Tone};
@@ -158,13 +159,20 @@ fn drop_overlay(app: &App, ctx: &egui::Context) {
         return;
     }
     let p = Palette::of_ctx(ctx);
-    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop")));
+    // Подсказка проявляется, как только файлы оказались над окном.
+    let motion = Motion::of(ctx);
+    let at = motion.first_seen(ctx, egui::Id::new("tetra-drop-overlay"));
+    let shown = motion::ease_out(motion.once(ctx, at, 0.0, motion::STATE));
+    let mut painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop")));
+    painter.set_opacity(shown);
     let screen = ctx.content_rect();
     if app.mode == crate::app::Mode::Pack
         && let Some(channel) = app.drop_target
         && let Some(rect) = app.card_rects[channel.index()]
     {
-        let color = theme::channel_color(&p, channel);
+        // Рамка перетекает от карточки к карточке цветом их каналов.
+        let color =
+            motion.color(ctx, egui::Id::new("tetra-drop-color"), theme::channel_color(&p, channel), motion::HOVER);
         painter.rect_filled(rect, radius::CARD, p.soft(color));
         painter.rect_stroke(rect, radius::CARD, Stroke::new(2.0, color), egui::StrokeKind::Inside);
         let role = &app.work.slots[channel.index()].role;
@@ -211,12 +219,23 @@ fn toasts(app: &mut App, ctx: &egui::Context) {
             ToastKind::Error => Tone::Danger,
         };
         let color = tone.color(&p);
-        let age = toast.born.elapsed().as_secs_f32();
-        let fade = (age / 0.18).min(1.0);
+        // Приход — по кривой шкалы снизу вверх, уход — угасание за последние `LEAVE`.
+        let motion = Motion::of(ctx);
+        let now = ctx.input(|i| i.time);
+        let since = now - toast.born.elapsed().as_secs_f64();
+        let arrive = motion::ease_out(motion.once(ctx, since, 0.0, motion::STATE));
+        let left = toast.left().as_secs_f32();
+        let leave = if motion.enabled && left < motion::LEAVE {
+            ctx.request_repaint();
+            motion::ease_in(1.0 - left / motion::LEAVE)
+        } else {
+            0.0
+        };
+        let fade = arrive * (1.0 - leave);
         let area = egui::Area::new(egui::Id::new(("toast", i, toast.born)))
             .order(egui::Order::Tooltip)
             .pivot(egui::Align2::CENTER_BOTTOM)
-            .fixed_pos(egui::pos2(screen.center().x, y + (1.0 - fade) * 12.0))
+            .fixed_pos(egui::pos2(screen.center().x, y + (1.0 - arrive) * 12.0 + leave * 6.0))
             .interactable(true);
         let response = area.show(ctx, |ui| {
             ui.set_opacity(fade);

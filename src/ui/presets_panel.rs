@@ -1,5 +1,6 @@
 //! Левая панель: список пресетов и настройки выбранного.
 
+use anvil_ui::motion::{self, Motion, widgets as fx};
 use anvil_ui::theme::radius;
 use anvil_ui::widgets as w;
 use anvil_ui::{Icon, Kind, Palette, semibold};
@@ -62,8 +63,10 @@ fn list(app: &mut App, ui: &mut Ui) {
                 .color(p.weak),
         );
     }
-    for i in mine {
-        row(app, ui, i);
+    // Свои пресеты «въезжают»: новый или дубликат видно, куда он встал.
+    for (n, i) in mine.into_iter().enumerate() {
+        let key = app.presets[i].name.clone();
+        fx::enter(ui, key, n, |ui| row(app, ui, i));
     }
 }
 
@@ -73,16 +76,23 @@ fn row(app: &mut App, ui: &mut Ui, index: usize) {
     let selected = index == app.selected;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), Sense::click());
     let hovered = response.hovered() || response.context_menu_opened();
+    // Выделение и подсветка перетекают, полоска слева вырастает от середины строки.
+    let motion = Motion::of(ui.ctx());
+    let id = egui::Id::new(("tetra-preset-row", &preset.name));
+    let on = motion.toggle(ui.ctx(), id.with("selected"), selected, motion::STATE);
+    let hover = motion.toggle(ui.ctx(), id.with("hover"), hovered && !selected, motion::HOVER);
     let painter = ui.painter();
-    if selected {
-        painter.rect_filled(rect, radius::CONTROL, p.soft(p.accent));
+    if hover > 0.0 {
+        painter.rect_filled(rect, radius::CONTROL, p.hover.gamma_multiply(hover));
+    }
+    if on > 0.0 {
+        painter.rect_filled(rect, radius::CONTROL, p.soft(p.accent).gamma_multiply(on));
+        let bar = (rect.height() - 14.0) * on;
         painter.rect_filled(
-            Rect::from_min_size(rect.min + egui::vec2(0.0, 7.0), egui::vec2(3.0, rect.height() - 14.0)),
+            Rect::from_center_size(egui::pos2(rect.min.x + 1.5, rect.center().y), egui::vec2(3.0, bar)),
             2,
             p.accent,
         );
-    } else if hovered {
-        painter.rect_filled(rect, radius::CONTROL, p.hover);
     }
     let dot = egui::pos2(rect.min.x + 14.0, rect.center().y);
     painter.circle_filled(dot, 4.0, theme::engine_color(&p, preset.engine));

@@ -1,5 +1,6 @@
 //! Правая панель: предпросмотр результата и экспорт.
 
+use anvil_ui::motion::{self, Motion, widgets as fx};
 use anvil_ui::theme::radius;
 use anvil_ui::widgets as w;
 use anvil_ui::{Icon, Kind, Palette, Tone, semibold};
@@ -24,10 +25,12 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     });
     ui.add_space(6.0);
 
-    if app.sizes_differ() {
+    // Предупреждение выезжает по высоте, а не толкает предпросмотр рывком.
+    let differ = app.sizes_differ();
+    fx::reveal(ui, "size-warning", differ, |ui| {
         size_warning(app, ui);
         ui.add_space(8.0);
-    }
+    });
 
     // Кнопка экспорта всегда на виду, внизу панели.
     egui::Panel::bottom("export-bar")
@@ -134,32 +137,56 @@ fn canvas(app: &mut App, ui: &mut Ui, size: Vec2) {
     app.view.fit_zoom = fit;
     let mut zoom = app.view.zoom.unwrap_or(fit);
 
-    if response.hovered() {
-        let scroll = ui.input(|i| i.smooth_scroll_delta.y + i.zoom_delta().ln() * 200.0);
-        if scroll.abs() > 0.0
-            && let Some(cursor) = response.hover_pos()
-        {
-            let new = (zoom * (scroll * 0.003).exp()).clamp(fit.min(0.05), 64.0);
-            let from_center = cursor - rect.center();
-            app.view.pan = from_center - (from_center - app.view.pan) * (new / zoom);
-            zoom = new;
-            app.view.zoom = Some(zoom);
-        }
+    let scroll =
+        if response.hovered() { ui.input(|i| i.smooth_scroll_delta.y + i.zoom_delta().ln() * 200.0) } else { 0.0 };
+    // Колесо и перетаскивание идут за рукой: если шёл плавный переход, продолжаем с того,
+    // что видно сейчас, а не прыгаем к его цели.
+    if app.view.from.is_some() && (scroll.abs() > 0.0 || response.dragged()) {
+        app.view.from = None;
+        let (shown_zoom, shown_pan) = app.view.shown;
+        zoom = shown_zoom;
+        app.view.zoom = Some(zoom);
+        app.view.pan = shown_pan;
+    }
+    // `scroll` не ноль только под курсором.
+    if scroll.abs() > 0.0
+        && let Some(cursor) = response.hover_pos()
+    {
+        let new = (zoom * (scroll * 0.003).exp()).clamp(fit.min(0.05), 64.0);
+        let from_center = cursor - rect.center();
+        app.view.pan = from_center - (from_center - app.view.pan) * (new / zoom);
+        zoom = new;
+        app.view.zoom = Some(zoom);
     }
     if response.dragged() {
         app.view.pan += response.drag_delta();
         app.view.zoom = Some(zoom);
     }
     if response.double_clicked() {
-        app.view.zoom = None;
-        app.view.pan = Vec2::ZERO;
+        app.view.fit(ui.ctx());
         zoom = fit;
     }
     if app.view.zoom.is_none() {
         app.view.pan = Vec2::ZERO;
     }
 
-    let image_rect = Rect::from_center_size(rect.center() + app.view.pan, egui::vec2(tw * zoom, th * zoom));
+    // Плавный переход кнопок масштаба и «вписать»: масштаб — по степени (равные доли на глаз),
+    // сдвиг — по прямой.
+    let mut shown_zoom = zoom;
+    let mut shown_pan = app.view.pan;
+    if let Some((from_zoom, from_pan, since)) = app.view.from {
+        let t = Motion::of(ui.ctx()).once(ui.ctx(), since, 0.0, motion::GRAPH);
+        let e = motion::ease_out(t);
+        shown_zoom = from_zoom * (zoom / from_zoom).powf(e);
+        shown_pan = from_pan + (app.view.pan - from_pan) * e;
+        if t >= 1.0 {
+            app.view.from = None;
+        }
+    }
+    app.view.shown = (shown_zoom, shown_pan);
+    let zoom = shown_zoom;
+
+    let image_rect = Rect::from_center_size(rect.center() + shown_pan, egui::vec2(tw * zoom, th * zoom));
     let alpha_view = app.view.mode == ViewMode::Rgba && app.alpha_visible();
     if alpha_view {
         theme::checkerboard(&painter, image_rect, 10.0);
@@ -286,14 +313,18 @@ fn strips(app: &mut App, ui: &mut Ui) {
                 }
                 let color = theme::channel_color(&p, channel);
                 let active = app.view.mode == ViewMode::Channel(channel);
-                let stroke = if active {
-                    Stroke::new(2.0, color)
+                let motion = Motion::of(ui.ctx());
+                let target = if active {
+                    color
                 } else if response.hovered() {
-                    Stroke::new(1.0, color.gamma_multiply(0.7))
+                    color.gamma_multiply(0.7)
                 } else {
-                    Stroke::new(1.0, p.border)
+                    p.border
                 };
-                painter.rect_stroke(rect, radius::CONTROL, stroke, egui::StrokeKind::Inside);
+                let stroke_color = motion.color(ui.ctx(), egui::Id::new(("tetra-strip", i)), target, motion::HOVER);
+                let width = 1.0 + motion.toggle(ui.ctx(), egui::Id::new(("tetra-strip-on", i)), active, motion::STATE);
+                let painter = ui.painter();
+                painter.rect_stroke(rect, radius::CONTROL, Stroke::new(width, stroke_color), egui::StrokeKind::Inside);
                 if response
                     .on_hover_cursor(egui::CursorIcon::PointingHand)
                     .on_hover_text(t("Show this channel alone"))
@@ -448,11 +479,14 @@ fn export_bar(app: &mut App, ui: &mut Ui) {
     let ready = app.can_export();
     let label = if app.exporting() { t("Exporting…") } else { t("Export") };
     let width = ui.available_width();
-    let r = ui
-        .add_enabled_ui(ready.is_ok(), |ui| {
+    // Отказ (не из чего собирать, ошибка записи) — кнопка встряхивается: «не так».
+    let refused = std::mem::take(&mut app.export_refused);
+    let r = fx::shake(ui, "export-button", refused, 6.0, |ui| {
+        ui.add_enabled_ui(ready.is_ok(), |ui| {
             w::button_sized(ui, Kind::Primary, Some(Icon::Download), label, egui::vec2(width, 40.0))
         })
-        .inner;
+        .inner
+    });
     let r = match ready {
         Ok(()) => r.on_hover_text("Ctrl+E"),
         Err(why) => r.on_disabled_hover_text(why),
@@ -464,7 +498,8 @@ fn export_bar(app: &mut App, ui: &mut Ui) {
     if let Some(path) = app.last_export.clone() {
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            theme::icon(ui, Icon::Check, 14.0, p.success);
+            // Галочка дорисовывается после каждого удачного экспорта.
+            fx::result_mark(ui, app.exports, true, 16.0);
             ui.add(
                 egui::Label::new(egui::RichText::new(crate::source::display_name(&path)).size(12.0).color(p.weak))
                     .truncate(),

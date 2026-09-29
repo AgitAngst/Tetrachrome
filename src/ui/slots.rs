@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use anvil_ui::motion::{self, Motion, effects};
 use anvil_ui::theme::radius;
 use anvil_ui::widgets as w;
 use anvil_ui::{Icon, Kind, Palette, semibold};
@@ -79,8 +80,15 @@ fn header(app: &mut App, ui: &mut Ui) {
                 ui.add_space(4.0);
                 theme::chip(ui, app.work.engine.label(), theme::engine_color(&p, app.work.engine));
                 if modified {
-                    theme::chip(ui, t("MODIFIED"), p.warning)
-                        .on_hover_text(t("Settings differ from the saved preset. Ctrl+S to save."));
+                    // Плашка проявляется, а не выскакивает: видно, что её вызвала только что сделанная правка.
+                    let motion = Motion::of(ui.ctx());
+                    let at = motion.first_seen(ui.ctx(), egui::Id::new("tetra-modified-chip"));
+                    let shown = motion::ease_out(motion.once(ui.ctx(), at, 0.0, motion::STATE));
+                    ui.scope(|ui| {
+                        ui.set_opacity(shown);
+                        theme::chip(ui, t("MODIFIED"), p.warning)
+                            .on_hover_text(t("Settings differ from the saved preset. Ctrl+S to save."));
+                    });
                 }
             });
         });
@@ -106,8 +114,19 @@ fn card(app: &mut App, ui: &mut Ui, channel: Channel, rect: Rect) {
     let color = theme::channel_color(&p, channel);
     let enabled = channel != Channel::A || app.work.alpha;
     let hovered = ui.rect_contains_pointer(rect);
-    ui.painter().rect_filled(rect, radius::CARD, if hovered && enabled { p.raised } else { p.card });
-    ui.painter().rect_stroke(rect, radius::CARD, Stroke::new(1.0, p.border), egui::StrokeKind::Inside);
+    let motion = Motion::of(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let target = if hovered && enabled { p.raised } else { p.card };
+    let bg = motion.color(&ctx, egui::Id::new(("tetra-card-bg", i)), target, motion::HOVER);
+    ui.painter().rect_filled(rect, radius::CARD, bg);
+    // В канал легла другая карта — карточка вспыхивает его цветом и гаснет: видно, куда
+    // попал файл, особенно когда несколько разложились по суффиксам сами.
+    let flash = motion.flash(&ctx, egui::Id::new(("tetra-card-flash", i)), app.slots[i].as_ref().map(|s| s.id));
+    if flash > 0.0 {
+        ui.painter().rect_filled(rect, radius::CARD, color.gamma_multiply(0.14 * flash));
+    }
+    let border = if flash > 0.0 { p.border.lerp_to_gamma(color, flash) } else { p.border };
+    ui.painter().rect_stroke(rect, radius::CARD, Stroke::new(1.0 + flash, border), egui::StrokeKind::Inside);
     // Цветная полоска сверху: канал видно краем глаза.
     let strip = Rect::from_min_size(rect.min + egui::vec2(14.0, 0.0), egui::vec2(rect.width() - 28.0, 2.0));
     ui.painter().rect_filled(strip, 1, color.gamma_multiply(if enabled { 0.8 } else { 0.25 }));
@@ -191,15 +210,31 @@ fn thumb(app: &mut App, ui: &mut Ui, channel: Channel) {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(THUMB), Sense::click());
     let painter = ui.painter().clone();
     let color = theme::channel_color(&p, channel);
+    let motion = Motion::of(ui.ctx());
+    let ctx = ui.ctx().clone();
+    if app.pending[channel.index()] > 0 {
+        // Карта для этого канала ещё читается с диска — скелетон на месте миниатюры.
+        let phase = motion.enabled.then(|| motion.cycle(&ctx, motion::SHIMMER));
+        let glow = if p.dark { p.hover } else { p.card };
+        effects::shimmer(&painter, rect, 8, p.raised, glow, phase);
+        return;
+    }
     match app.slots[channel.index()].clone() {
         Some(src) => {
-            let ctx = ui.ctx().clone();
             let texture = app.thumb(&ctx, &src);
             let size = fit(Vec2::new(src.thumb.width() as f32, src.thumb.height() as f32), rect.size());
             let image_rect = Rect::from_center_size(rect.center(), size);
+            // Новая карта проявляется поверх подложки.
+            let at = motion.first_seen(&ctx, egui::Id::new(("tetra-thumb", channel.index(), src.id)));
+            let shown = motion::ease_out(motion.once(&ctx, at, 0.0, motion::STATE));
             painter.rect_filled(rect, 8, theme::PREVIEW_BG);
             theme::checkerboard(&painter.with_clip_rect(image_rect), image_rect, 8.0);
-            painter.image(texture, image_rect, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+            painter.image(
+                texture,
+                image_rect,
+                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                Color32::WHITE.gamma_multiply(shown),
+            );
             painter.rect_stroke(rect, 8, Stroke::new(1.0, p.border), egui::StrokeKind::Inside);
             if response.hovered() {
                 // Поверх картинки — всегда тёмная вуаль и светлый текст, в любой теме.
@@ -218,10 +253,16 @@ fn thumb(app: &mut App, ui: &mut Ui, channel: Channel) {
         None => {
             let fill = app.work.slots[channel.index()].fill;
             painter.rect_filled(rect, 8, Color32::from_gray(fill).gamma_multiply(0.18).lerp_to_gamma(p.raised, 0.6));
-            let stroke = Stroke::new(1.2, if response.hovered() { color } else { p.border_strong });
+            let hover = motion.toggle(
+                &ctx,
+                egui::Id::new(("tetra-thumb-hover", channel.index())),
+                response.hovered(),
+                motion::HOVER,
+            );
+            let stroke = Stroke::new(1.2, p.border_strong.lerp_to_gamma(color, hover));
             dashed_rect(&painter, rect.shrink(1.0), stroke);
             let icon = Rect::from_center_size(rect.center() - egui::vec2(0.0, 12.0), Vec2::splat(24.0));
-            anvil_ui::icons::paint(&painter, icon, Icon::Plus, if response.hovered() { color } else { p.weak });
+            anvil_ui::icons::paint(&painter, icon, Icon::Plus, p.weak.lerp_to_gamma(color, hover));
             painter.text(
                 rect.center() + egui::vec2(0.0, 14.0),
                 egui::Align2::CENTER_CENTER,

@@ -2,6 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
+use anvil_ui::motion::widgets as fx;
 use anvil_ui::theme::radius;
 use anvil_ui::widgets as w;
 use anvil_ui::{Icon, Kind, Palette, semibold};
@@ -121,6 +122,8 @@ fn table(app: &mut App, ui: &mut Ui) {
                 ui.end_row();
 
                 let groups = app.batch.plan.groups.clone();
+                let current = app.batch.run.as_ref().and_then(|r| r.current());
+                let runs = app.batch.runs;
                 for group in &groups {
                     let key = group.base.to_lowercase();
                     let mut on = !app.batch.disabled.contains(&key);
@@ -140,8 +143,22 @@ fn table(app: &mut App, ui: &mut Ui) {
                     let status = app.batch.status.get(&key).copied();
                     let roles = channels.iter().filter(|c| !app.work.slots[c.index()].role.is_empty()).count();
                     match (status, filled) {
-                        (Some(true), _) => status_label(ui, Icon::Check, t("done"), p.success),
-                        (Some(false), _) => status_label(ui, Icon::Warning, t("failed"), p.danger),
+                        // Итог материала — галочка или крестик дорисовываются, как только он готов.
+                        (Some(ok), _) => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 4.0;
+                                fx::result_mark(ui, (runs, &key), ok, 16.0);
+                                let (text, color) = if ok { (t("done"), p.success) } else { (t("failed"), p.danger) };
+                                ui.label(egui::RichText::new(text).size(12.0).color(color));
+                            });
+                        }
+                        _ if current.as_deref() == Some(key.as_str()) => {
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 4.0;
+                                w::spinner(ui, 14.0);
+                                ui.label(egui::RichText::new(t("packing…")).size(12.0).color(p.accent_text));
+                            });
+                        }
                         (None, 0) => status_label(ui, Icon::Warning, t("no maps"), p.warning),
                         (None, n) if n < roles => status_label(ui, Icon::Info, t("partial"), p.warning),
                         _ => status_label(ui, Icon::Check, t("ready"), p.weak),

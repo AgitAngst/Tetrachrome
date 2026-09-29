@@ -106,6 +106,26 @@ pub struct View {
     pub mode: ViewMode,
     /// Масштаб, которым картинка вписана сейчас: от него считаются +/−.
     pub fit_zoom: f32,
+    /// Масштаб и сдвиг, показанные в прошлом кадре — отсюда начинается плавный переход.
+    pub shown: (f32, egui::Vec2),
+    /// Идёт плавный переход (кнопки масштаба, «вписать»): откуда и когда начат (время egui).
+    /// Колесо и перетаскивание переходов не делают — они и так идут за рукой.
+    pub from: Option<(f32, egui::Vec2, f64)>,
+}
+
+impl View {
+    /// Начать плавный переход от того, что видно сейчас, к новым `zoom`/`pan`.
+    pub fn glide(&mut self, ctx: &egui::Context) {
+        let (zoom, pan) = self.shown;
+        self.from = Some((zoom, pan, ctx.input(|i| i.time)));
+    }
+
+    /// Вписать картинку в окно — плавно.
+    pub fn fit(&mut self, ctx: &egui::Context) {
+        self.glide(ctx);
+        self.zoom = None;
+        self.pan = egui::Vec2::ZERO;
+    }
 }
 
 pub struct OutputSettings {
@@ -156,6 +176,14 @@ pub struct BatchRun {
     bases: Vec<String>,
 }
 
+impl BatchRun {
+    /// Материал, который пакуется сейчас (в нижнем регистре — как ключи `status`).
+    pub fn current(&self) -> Option<String> {
+        let done = self.progress.done.load(std::sync::atomic::Ordering::Relaxed);
+        self.bases.get(done).map(|b| b.to_lowercase())
+    }
+}
+
 #[derive(Default)]
 pub struct BatchState {
     pub files: Vec<PathBuf>,
@@ -168,6 +196,8 @@ pub struct BatchState {
     /// Итог по материалам последнего запуска.
     pub status: HashMap<String, bool>,
     pub finished_dir: Option<PathBuf>,
+    /// Номер запуска: значки итога играют заново на каждый.
+    pub runs: u64,
 }
 
 pub struct App {
@@ -187,6 +217,8 @@ pub struct App {
 
     loads: Vec<Receiver<Loaded>>,
     pub loading: usize,
+    /// Сколько загрузок идёт прямо в канал — карточка показывает скелетон.
+    pub pending: [usize; 4],
 
     pub mode: Mode,
     pub preview: Preview,
@@ -194,6 +226,10 @@ pub struct App {
     pub output: OutputSettings,
     export: Option<ExportJob>,
     pub last_export: Option<PathBuf>,
+    /// Номер удачного экспорта: галочка у имени файла играет заново на каждый.
+    pub exports: u64,
+    /// Экспорт отклонён в этом кадре — кнопка встряхнётся.
+    pub export_refused: bool,
     pub batch: BatchState,
 
     pub toasts: Vec<Toast>,
@@ -248,9 +284,17 @@ impl App {
             settled,
             loads: Vec::new(),
             loading: 0,
+            pending: [0; 4],
             mode: Mode::Pack,
             preview: Preview::default(),
-            view: View { zoom: None, pan: egui::Vec2::ZERO, mode: ViewMode::Rgba, fit_zoom: 1.0 },
+            view: View {
+                zoom: None,
+                pan: egui::Vec2::ZERO,
+                mode: ViewMode::Rgba,
+                fit_zoom: 1.0,
+                shown: (1.0, egui::Vec2::ZERO),
+                from: None,
+            },
             output: OutputSettings {
                 template: "{basename}{label}".to_owned(),
                 format: OutputFormat::Png,
@@ -262,6 +306,8 @@ impl App {
             },
             export: None,
             last_export: None,
+            exports: 0,
+            export_refused: false,
             batch: BatchState::default(),
             toasts,
             dialog: None,
@@ -484,6 +530,9 @@ impl App {
         }
         let (tx, rx) = mpsc::channel();
         self.loading += fresh.len();
+        if let LoadTarget::Slot(channel) = target {
+            self.pending[channel.index()] += fresh.len();
+        }
         self.loads.push(rx);
         std::thread::spawn(move || {
             for path in fresh {
@@ -554,6 +603,9 @@ impl App {
         }
         for Loaded { target, result } in done {
             self.loading = self.loading.saturating_sub(1);
+            if let LoadTarget::Slot(channel) = target {
+                self.pending[channel.index()] = self.pending[channel.index()].saturating_sub(1);
+            }
             match result {
                 Ok(src) => {
                     let src = Arc::new(src);
@@ -802,6 +854,7 @@ impl App {
     pub fn export(&mut self, ctx: &egui::Context, confirmed: bool) {
         if let Err(why) = self.can_export() {
             self.toast(ToastKind::Warning, why.to_owned());
+            self.export_refused = true;
             return;
         }
         let (Some(dir), Some(size)) = (self.output_dir(), self.target_size()) else {
@@ -858,8 +911,12 @@ impl App {
                     born: Instant::now(),
                 });
                 self.last_export = Some(path);
+                self.exports += 1;
             }
-            Err(e) => self.toast(ToastKind::Error, e),
+            Err(e) => {
+                self.toast(ToastKind::Error, e);
+                self.export_refused = true;
+            }
         }
     }
 
@@ -942,6 +999,7 @@ impl App {
         std::thread::spawn(move || batch::run(job, p2, tx, move || ctx2.request_repaint()));
         self.batch.log.clear();
         self.batch.status.clear();
+        self.batch.runs += 1;
         self.batch.finished_dir = None;
         self.batch
             .log
@@ -1050,9 +1108,11 @@ impl App {
 
     fn expire_toasts(&mut self, ctx: &egui::Context) {
         let now = Instant::now();
-        self.toasts.retain(|t| now.duration_since(t.born) < TOAST_TIME + extra(t));
-        if !self.toasts.is_empty() {
-            ctx.request_repaint_after(Duration::from_millis(250));
+        self.toasts.retain(|t| now.duration_since(t.born) < t.lifetime());
+        // Кадр нужен к моменту, когда ближайшее уведомление начнёт гаснуть, — не раньше.
+        let leave = Duration::from_secs_f32(anvil_ui::motion::LEAVE);
+        if let Some(next) = self.toasts.iter().map(|t| t.left().saturating_sub(leave)).min() {
+            ctx.request_repaint_after(next);
         }
     }
 
@@ -1135,8 +1195,7 @@ impl App {
             self.reload_sources();
         }
         if fit {
-            self.view.zoom = None;
-            self.view.pan = egui::Vec2::ZERO;
+            self.view.fit(ctx);
         }
     }
 
@@ -1171,6 +1230,8 @@ impl App {
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Флаг Windows «Показывать анимацию» мог смениться, пока программа открыта.
+        anvil_ui::motion::tick(ctx);
         self.poll_loads(ctx);
         self.poll_export();
         self.poll_batch();
@@ -1200,9 +1261,17 @@ impl eframe::App for App {
     }
 }
 
-/// Уведомление с кнопкой живёт дольше: до кнопки ещё надо дотянуться.
-fn extra(toast: &Toast) -> Duration {
-    if toast.reveal.is_some() || toast.kind == ToastKind::Error { Duration::from_secs(4) } else { Duration::ZERO }
+impl Toast {
+    /// Сколько уведомление живёт. С кнопкой — дольше: до неё ещё надо дотянуться.
+    pub fn lifetime(&self) -> Duration {
+        let extra = self.reveal.is_some() || self.kind == ToastKind::Error;
+        TOAST_TIME + if extra { Duration::from_secs(4) } else { Duration::ZERO }
+    }
+
+    /// Сколько осталось жить.
+    pub fn left(&self) -> Duration {
+        self.lifetime().saturating_sub(self.born.elapsed())
+    }
 }
 
 fn basename_of(slots: &[Option<Arc<Source>>; 4], preset: &Preset) -> Option<String> {

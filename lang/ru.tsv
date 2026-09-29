@@ -192,6 +192,7 @@ constant	постоянное
 constant {}	постоянное {}
 done	готово
 failed	ошибка
+packing…	упаковка…
 from largest source	по большему исходнику
 from smallest source	по меньшему исходнику
 no maps	нет карт
