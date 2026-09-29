@@ -1,6 +1,6 @@
 [package]
 name = "tetrachrome"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Texture channel packer for game artists"
 license = "MIT"
@@ -23,8 +23,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
-anvil-ui = { git = "https://github.com/AgitAngst/Anvil", tag = "kit-v0.2.0" }
-image = { version = "0.25.10", default-features = false, features = ["png", "ico"] }
+# Значок exe — ресурс из `assets/icon/tetrachrome.ico`.
 winresource = "0.1"
 
 [profile.release]

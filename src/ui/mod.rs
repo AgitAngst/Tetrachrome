@@ -2,6 +2,7 @@
 
 mod batch_view;
 mod dialogs;
+mod mark;
 mod output;
 mod presets_panel;
 mod slots;
@@ -20,6 +21,7 @@ use crate::theme;
 pub fn info() -> AppInfo {
     AppInfo {
         name: "Tetrachrome",
+        // Поле набора; знак рисует `mark.rs` (значок из `Icon` тут не показывается).
         icon: Icon::Tiles,
         version: env!("CARGO_PKG_VERSION"),
         tagline: t("Packs grayscale maps into the RGBA channels of one texture"),
@@ -80,7 +82,7 @@ pub fn draw(app: &mut App, ui: &mut Ui) {
     settings(app, &ctx);
     let info = info();
     let status = anvil_update::ui::about_status(&ctx, &app.updater);
-    if chrome::about(&ctx, &mut app.about_open, &info, status.as_deref()) == Some(AboutAction::CheckUpdates) {
+    if mark::about(&ctx, &mut app.about_open, &info, status.as_deref()) == Some(AboutAction::CheckUpdates) {
         app.updater.check(app.settings.common.prerelease, None, true);
     }
     toasts(app, &ctx);

@@ -13,7 +13,7 @@ pub fn show(app: &mut App, ui: &mut Ui) {
     chrome::top_bar(ui, |ui| {
         let p = Palette::of(ui);
         let info = super::info();
-        chrome::brand(ui, info.icon, info.name);
+        super::mark::brand(ui, info.name);
         ui.add_space(14.0);
         menus(app, ui);
 

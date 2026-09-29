@@ -5,6 +5,7 @@
 
 mod app;
 mod batch;
+mod icon;
 mod lang;
 mod model;
 mod naming;
@@ -24,7 +25,7 @@ fn main() -> eframe::Result<()> {
             .with_title("Tetrachrome")
             .with_inner_size([1480.0, 920.0])
             .with_min_inner_size([1060.0, 640.0])
-            .with_icon(std::sync::Arc::new(anvil_ui::appicon::icon_data(theme::ACCENT, anvil_ui::Icon::Tiles)))
+            .with_icon(std::sync::Arc::new(icon::window()))
             .with_drag_and_drop(true),
         centered: true,
         ..Default::default()

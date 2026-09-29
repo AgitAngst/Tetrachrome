@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon/tetrachrome-128.png" width="96" alt="Tetrachrome"></p>
+
 # Tetrachrome
 
 Упаковщик текстурных каналов для игровых художников: собирает до четырёх
