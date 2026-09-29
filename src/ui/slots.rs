@@ -16,7 +16,11 @@ use crate::theme;
 
 use super::presets_panel::paint_badge;
 
+/// Наименьшая высота карточки. Больше — если содержимое не влезает (длинные подписи на
+/// русском, узкое окно): ряд берёт высоту самой высокой из своих карточек.
 const CARD_HEIGHT: f32 = 236.0;
+/// Отступ содержимого от краёв карточки.
+const CARD_PAD: egui::Vec2 = egui::vec2(16.0, 14.0);
 const THUMB: f32 = 128.0;
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -29,17 +33,26 @@ pub fn show(app: &mut App, ui: &mut Ui) {
         let columns = if width >= 700.0 { 2 } else { 1 };
         let card_w = (width - gap * (columns - 1) as f32) / columns as f32;
         for row in Channel::ALL.chunks(columns) {
+            // Сколько нужно содержимому — знаем с прошлого кадра; не влезло — ещё кадр, и ряд вырастет.
+            let height_id = egui::Id::new(("tetra-card-row", row[0].index(), columns));
+            let height: f32 = ui.data(|d| d.get_temp(height_id)).unwrap_or(CARD_HEIGHT);
+            let mut need = CARD_HEIGHT;
             ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = gap;
                 for &channel in row {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(card_w, CARD_HEIGHT), Sense::hover());
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(card_w, height), Sense::hover());
                     let mut child = ui.new_child(
                         egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)),
                     );
-                    card(app, &mut child, channel, rect);
+                    need = need.max(card(app, &mut child, channel, rect));
                     app.card_rects[channel.index()] = Some(rect.intersect(ui.clip_rect()));
                 }
             });
+            let need = need.ceil();
+            if need != height {
+                ui.data_mut(|d| d.insert_temp(height_id, need));
+                ui.ctx().request_repaint();
+            }
             ui.add_space(gap);
         }
         hint(app, ui);
@@ -108,7 +121,8 @@ fn header(app: &mut App, ui: &mut Ui) {
     ui.label(egui::RichText::new(text).color(p.weak));
 }
 
-fn card(app: &mut App, ui: &mut Ui, channel: Channel, rect: Rect) {
+/// Карточка канала в `rect`. Возвращает высоту, которая нужна её содержимому.
+fn card(app: &mut App, ui: &mut Ui, channel: Channel, rect: Rect) -> f32 {
     let p = Palette::of(ui);
     let i = channel.index();
     let color = theme::channel_color(&p, channel);
@@ -131,9 +145,15 @@ fn card(app: &mut App, ui: &mut Ui, channel: Channel, rect: Rect) {
     let strip = Rect::from_min_size(rect.min + egui::vec2(14.0, 0.0), egui::vec2(rect.width() - 28.0, 2.0));
     ui.painter().rect_filled(strip, 1, color.gamma_multiply(if enabled { 0.8 } else { 0.25 }));
 
-    let inner = rect.shrink2(egui::vec2(16.0, 14.0));
+    let inner = rect.shrink2(CARD_PAD);
     let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
-    let ui = &mut ui;
+    card_body(app, &mut ui, channel, enabled);
+    ui.min_rect().bottom() - rect.top() + CARD_PAD.y
+}
+
+fn card_body(app: &mut App, ui: &mut Ui, channel: Channel, enabled: bool) {
+    let p = Palette::of(ui);
+    let i = channel.index();
 
     // Шапка: буква, роль, кнопки.
     ui.horizontal(|ui| {
